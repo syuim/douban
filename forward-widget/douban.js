@@ -9,7 +9,7 @@ WidgetMetadata = {
   author: "suyu",
   site: "https://github.com/InchStudio/ForwardWidgets",
   globalParams: [
-    { name: "server", title: "服务地址", type: "input", value: "https://proxy.laoz.org/douban" },
+    { name: "server", title: "服务地址", type: "input", value: "https://proxy.laoz.org/doubanapi" },
   ],
   modules: [
     {

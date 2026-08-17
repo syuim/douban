@@ -85,7 +85,7 @@ func (f *FanartAPI) requestWithRetry(ctx context.Context, path string, params ma
 func (f *FanartAPI) GetMovieImages(ctx context.Context, movieID string, clientKey string) (*FanartMovieResponse, error) {
 	var result FanartMovieResponse
 	err := f.requestWithRetry(ctx, "/movies/"+movieID, f.fanartParams(clientKey),
-		&CacheConfig{Key: "fanart:movie:" + movieID, TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: "fanart:movie:" + movieID, TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }
@@ -93,7 +93,7 @@ func (f *FanartAPI) GetMovieImages(ctx context.Context, movieID string, clientKe
 func (f *FanartAPI) GetShowImages(ctx context.Context, tvID string, clientKey string) (*FanartTVResponse, error) {
 	var result FanartTVResponse
 	err := f.requestWithRetry(ctx, "/tv/"+tvID, f.fanartParams(clientKey),
-		&CacheConfig{Key: "fanart:tv:" + tvID, TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: "fanart:tv:" + tvID, TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }

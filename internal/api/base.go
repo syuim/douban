@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,8 +17,6 @@ import (
 
 	"stremio-addon-douban/internal/db"
 )
-
-const swrRefreshRatio = 0.3
 
 // DefaultProxyURL 是统一代理入口（emby-proxy /url，与 /img 同一实现），
 // 图片与内部 API 都经它转发：POST JSON {url, method, headers, body}，
@@ -153,10 +150,7 @@ func (b *BaseAPI) Request(ctx context.Context, method, path string, params map[s
 	}
 
 	if cacheCfg != nil {
-		if data, ok, stale := b.getCache(ctx, cacheCfg.Key); ok {
-			if stale {
-				b.refreshInBackground(method, fullURL, headers, cacheCfg)
-			}
+		if data, ok, _ := b.getCache(ctx, cacheCfg.Key); ok {
 			return data, 200, nil, nil
 		}
 	}
@@ -213,30 +207,6 @@ func (b *BaseAPI) acquireRequest(ctx context.Context, key string) (chan struct{}
 	}
 }
 
-func (b *BaseAPI) refreshInBackground(method, fullURL string, headers map[string]string, cacheCfg *CacheConfig) {
-	ch := make(chan struct{})
-	if _, loaded := b.requestMap.LoadOrStore(cacheCfg.Key, ch); loaded {
-		return
-	}
-	go func() {
-		defer func() {
-			b.requestMap.Delete(cacheCfg.Key)
-			close(ch)
-		}()
-		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		defer cancel()
-		resp, err := b.doRequest(ctx, method, fullURL, headers, nil)
-		if err != nil {
-			return
-		}
-		defer resp.Body.Close()
-		data, err := io.ReadAll(resp.Body)
-		if err == nil && resp.StatusCode < 400 {
-			b.setCache(cacheCfg.Key, data, cacheCfg.TTL)
-		}
-	}()
-}
-
 type APIError struct {
 	Status            int
 	Body              string
@@ -280,28 +250,17 @@ func (b *BaseAPI) getCache(ctx context.Context, key string) ([]byte, bool, bool)
 
 	var value string
 	var expiresAt int64
-	var createdAt sql.NullInt64
-	err = database.QueryRowContext(ctx, "SELECT value, expires_at, created_at FROM api_cache WHERE key = ?", key).
-		Scan(&value, &expiresAt, &createdAt)
+	err = database.QueryRowContext(ctx, "SELECT value, expires_at FROM api_cache WHERE key = ?", key).
+		Scan(&value, &expiresAt)
 	if err != nil {
 		return nil, false, false
 	}
 
-	now := time.Now().UnixMilli()
-	if expiresAt <= now {
+	if expiresAt <= time.Now().UnixMilli() {
 		return nil, false, false
 	}
 
-	stale := false
-	if createdAt.Valid && createdAt.Int64 > 0 {
-		originalTTLMs := expiresAt - createdAt.Int64
-		remainingMs := expiresAt - now
-		if originalTTLMs > 0 && float64(remainingMs) < float64(originalTTLMs)*swrRefreshRatio {
-			stale = true
-		}
-	}
-
-	return []byte(value), true, stale
+	return []byte(value), true, false
 }
 
 func (b *BaseAPI) setCache(key string, value []byte, ttl int) {

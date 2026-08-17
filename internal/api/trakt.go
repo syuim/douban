@@ -28,7 +28,7 @@ func (t *TraktAPI) Search(ctx context.Context, searchType, query string) ([]Trak
 	err := t.RequestJSON(ctx, "GET", "/search/"+searchType,
 		map[string]string{"query": query},
 		nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("trakt:search:%s:%s", searchType, query), TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: fmt.Sprintf("trakt:search:%s:%s", searchType, query), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return result, err
 }
@@ -37,7 +37,7 @@ func (t *TraktAPI) SearchByImdbID(ctx context.Context, imdbID string) ([]TraktSe
 	var result []TraktSearchResult
 	err := t.RequestJSON(ctx, "GET", "/search/imdb/"+imdbID,
 		nil, nil, nil,
-		&CacheConfig{Key: "trakt:search:imdb:" + imdbID, TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: "trakt:search:imdb:" + imdbID, TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return result, err
 }
@@ -46,7 +46,7 @@ func (t *TraktAPI) SearchByTmdbID(ctx context.Context, tmdbID string) ([]TraktSe
 	var result []TraktSearchResult
 	err := t.RequestJSON(ctx, "GET", "/search/tmdb/"+tmdbID,
 		nil, nil, nil,
-		&CacheConfig{Key: "trakt:search:tmdb:" + tmdbID, TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: "trakt:search:tmdb:" + tmdbID, TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return result, err
 }

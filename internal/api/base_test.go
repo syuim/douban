@@ -9,8 +9,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"stremio-addon-douban/internal/db"
 )
 
 // newTargetServer 返回一个返回固定 body 的目标服务
@@ -19,15 +17,11 @@ func newTargetServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return httptest.NewServer(handler)
 }
 
-func TestRequestServesFromCacheAndSWRRefreshes(t *testing.T) {
+func TestRequestServesFromCache(t *testing.T) {
 	var requests atomic.Int32
 	target := newTargetServer(t, func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
-		if requests.Load() >= 2 {
-			_, _ = w.Write([]byte(`"v2"`))
-			return
-		}
-		_, _ = w.Write([]byte(`"v1"`))
+		_, _ = w.Write([]byte(`"ok"`))
 	})
 	defer target.Close()
 
@@ -37,10 +31,11 @@ func TestRequestServesFromCacheAndSWRRefreshes(t *testing.T) {
 
 	d := NewBaseAPI(target.URL, map[string]string{})
 	ctx := context.Background()
-	cacheCfg := &CacheConfig{Key: "swr-test-key", TTL: 3600}
+	cacheCfg := &CacheConfig{Key: "cache-hit-test-key", TTL: 3600}
 
+	// 第一次请求应打到上游
 	data, status, _, err := d.Request(ctx, "GET", "/data", nil, nil, nil, cacheCfg)
-	if err != nil || status != 200 || string(data) != `"v1"` {
+	if err != nil || status != 200 || string(data) != `"ok"` {
 		t.Fatalf("first request: data=%s status=%d err=%v", data, status, err)
 	}
 	if requests.Load() != 1 {
@@ -49,42 +44,12 @@ func TestRequestServesFromCacheAndSWRRefreshes(t *testing.T) {
 
 	// 第二次请求应命中缓存，不再打上游
 	data, _, _, err = d.Request(ctx, "GET", "/data", nil, nil, nil, cacheCfg)
-	if err != nil || string(data) != `"v1"` {
+	if err != nil || string(data) != `"ok"` {
 		t.Fatalf("cached request: data=%s err=%v", data, err)
 	}
 	if requests.Load() != 1 {
 		t.Fatalf("cached request hit upstream: %d requests", requests.Load())
 	}
-
-	// 把缓存行手工改成 stale（剩余 1s，不足 30% TTL），请求应返回旧数据并触发后台刷新
-	database, err := db.GetDB()
-	if err != nil {
-		t.Fatalf("db: %v", err)
-	}
-	now := time.Now().UnixMilli()
-	if _, err := database.Exec(
-		`UPDATE api_cache SET created_at = ?, expires_at = ? WHERE key = ?`,
-		now-3600*1000, now+1000, cacheCfg.Key); err != nil {
-		t.Fatalf("mark stale: %v", err)
-	}
-
-	data, _, _, err = d.Request(ctx, "GET", "/data", nil, nil, nil, cacheCfg)
-	if err != nil || string(data) != `"v1"` {
-		t.Fatalf("stale request: data=%s err=%v", data, err)
-	}
-	if requests.Load() != 1 {
-		t.Fatalf("stale request hit upstream synchronously: %d requests", requests.Load())
-	}
-
-	// 后台刷新应把缓存更新为 v2
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if cached, ok, _ := d.getCache(ctx, cacheCfg.Key); ok && string(cached) == `"v2"` {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("background refresh did not update cache, requests=%d", requests.Load())
 }
 
 func TestRequestConcurrentDedup(t *testing.T) {

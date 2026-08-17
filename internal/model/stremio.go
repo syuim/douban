@@ -47,7 +47,8 @@ type CatalogResponse struct {
 }
 
 const (
-	SecondsPerHour = 3600
-	SecondsPerDay  = 86400
-	SecondsPerWeek = 604800
+	SecondsPerHour       = 3600
+	SecondsPerDay        = 86400
+	SecondsPerWeek       = 604800
+	SecondsDayPlusBuffer = 90000 // 25h：每日 2:00 全量拉取时旧缓存仍有 1h 余量
 )

@@ -76,7 +76,7 @@ func (t *TmdbAPI) GetExternalID(ctx context.Context, mediaType string, id int) (
 	var result TmdbExternalIDs
 	err := t.RequestJSON(ctx, "GET", fmt.Sprintf("/%s/%d/external_ids", mediaType, id),
 		nil, nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("tmdb:%s:%d:external_ids", mediaType, id), TTL: model.SecondsPerWeek},
+		&CacheConfig{Key: fmt.Sprintf("tmdb:%s:%d:external_ids", mediaType, id), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }
@@ -89,7 +89,7 @@ func (t *TmdbAPI) GetSubjectImages(ctx context.Context, mediaType string, id int
 	err := t.RequestJSON(ctx, "GET", fmt.Sprintf("/%s/%d/images", mediaType, id),
 		map[string]string{"include_image_language": strings.Join(imageLanguages, ",")},
 		nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("tmdb:%s:%d:images:%s", mediaType, id, strings.Join(imageLanguages, ",")), TTL: model.SecondsPerWeek},
+		&CacheConfig{Key: fmt.Sprintf("tmdb:%s:%d:images:%s", mediaType, id, strings.Join(imageLanguages, ",")), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }
@@ -99,7 +99,7 @@ func (t *TmdbAPI) Trending(ctx context.Context, mediaType, timeWindow string, pa
 	err := t.RequestJSON(ctx, "GET", fmt.Sprintf("/trending/%s/%s", mediaType, timeWindow),
 		map[string]string{"language": "zh-CN", "page": fmt.Sprintf("%d", page)},
 		nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("tmdb:trending:%s:%s:%d", mediaType, timeWindow, page), TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: fmt.Sprintf("tmdb:trending:%s:%s:%d", mediaType, timeWindow, page), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (t *TmdbAPI) Discover(ctx context.Context, mediaType string, params map[str
 	paramsKey := strings.Join(pairs, ",")
 	var result TmdbTrendingResult
 	err := t.RequestJSON(ctx, "GET", "/discover/"+mediaType, p, nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("tmdb:discover:%s:%s:%d", mediaType, paramsKey, page), TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: fmt.Sprintf("tmdb:discover:%s:%s:%d", mediaType, paramsKey, page), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (t *TmdbAPI) GetDetail(ctx context.Context, mediaType string, id int) (*Tmd
 	err := t.RequestJSON(ctx, "GET", fmt.Sprintf("/%s/%d", mediaType, id),
 		map[string]string{"language": "zh-CN", "append_to_response": "credits,external_ids"},
 		nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("tmdb:detail:%s:%d", mediaType, id), TTL: model.SecondsPerWeek},
+		&CacheConfig{Key: fmt.Sprintf("tmdb:detail:%s:%d", mediaType, id), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (t *TmdbAPI) GetGenres(ctx context.Context, mediaType string) (*TmdbGenreMa
 	err := t.RequestJSON(ctx, "GET", "/genre/"+mediaType+"/list",
 		map[string]string{"language": "zh-CN"},
 		nil, nil,
-		&CacheConfig{Key: "tmdb:genres:" + mediaType, TTL: model.SecondsPerWeek},
+		&CacheConfig{Key: "tmdb:genres:" + mediaType, TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }

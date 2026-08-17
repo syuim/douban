@@ -45,7 +45,7 @@ func (d *DoubanAPI) GetSubjectCollection(ctx context.Context, collectionID strin
 	var result DoubanSubjectCollectionInfo
 	err := d.RequestJSON(ctx, "GET", "/subject_collection/"+collectionID,
 		d.params(map[string]string{"for_mobile": "1"}), nil, nil,
-		&CacheConfig{Key: "subject_collection_info:" + collectionID, TTL: model.SecondsPerWeek},
+		&CacheConfig{Key: "subject_collection_info:" + collectionID, TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }
@@ -90,7 +90,7 @@ func (d *DoubanAPI) GetDoulistItems(ctx context.Context, doulistID string, maxPa
 				"start": fmt.Sprintf("%d", start),
 				"count": fmt.Sprintf("%d", pageSize),
 			}), nil, nil,
-			&CacheConfig{Key: fmt.Sprintf("doulist:%s:%d", doulistID, start), TTL: model.SecondsPerWeek},
+			&CacheConfig{Key: fmt.Sprintf("doulist:%s:%d", doulistID, start), TTL: model.SecondsDayPlusBuffer},
 			&result)
 		if err != nil {
 			return nil, err
@@ -115,7 +115,7 @@ func (d *DoubanAPI) GetSubjectCollectionItems(ctx context.Context, collectionID 
 			"start": fmt.Sprintf("%d", skip),
 			"count": fmt.Sprintf("%d", DoubanPageSize),
 		}), nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("subject_collection:%s:%d", collectionID, skip), TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: fmt.Sprintf("subject_collection:%s:%d", collectionID, skip), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	if err != nil {
 		return nil, err
@@ -169,7 +169,7 @@ func (d *DoubanAPI) GetSubjectDetail(ctx context.Context, subjectID int) (*Douba
 	var result DoubanSubjectDetail
 	err := d.RequestJSON(ctx, "GET", fmt.Sprintf("/subject/%d", subjectID),
 		d.params(nil), nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("subject_detail:%d", subjectID), TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: fmt.Sprintf("subject_detail:%d", subjectID), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }
@@ -180,7 +180,7 @@ func (d *DoubanAPI) GetSubjectDetailDesc(ctx context.Context, subjectID int) (ma
 	}
 	err := d.RequestJSON(ctx, "GET", fmt.Sprintf("/subject/%d/desc", subjectID),
 		d.params(nil), nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("subject_detail_desc:%d", subjectID), TTL: model.SecondsPerDay * 2},
+		&CacheConfig{Key: fmt.Sprintf("subject_detail_desc:%d", subjectID), TTL: model.SecondsDayPlusBuffer},
 		&raw)
 	if err != nil {
 		return nil, err
@@ -206,7 +206,7 @@ func (d *DoubanAPI) GetModules(ctx context.Context, modType string) (*DoubanModu
 	var result DoubanModulesResponse
 	err := d.RequestJSON(ctx, "GET", "/"+modType+"/modules",
 		d.params(nil), nil, nil,
-		&CacheConfig{Key: "douban_" + modType + "_modules", TTL: model.SecondsPerWeek},
+		&CacheConfig{Key: "douban_" + modType + "_modules", TTL: model.SecondsDayPlusBuffer},
 		&result)
 	return &result, err
 }

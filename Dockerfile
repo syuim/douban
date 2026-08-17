@@ -12,6 +12,6 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /server .
 COPY --from=builder /app/package.json .
-EXPOSE 3000
+EXPOSE 4000
 VOLUME ["/app/data"]
 CMD ["./server"]

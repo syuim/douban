@@ -38,19 +38,19 @@ func RunScheduledTask() {
 			continue
 		}
 		refreshCollection(ctx, database, svc, c.ID)
-		randomSleep(10, 35)
+		randomSleep(5, 18)
 	}
 
 	// 年度榜单（每个具体年份）
 	for _, c := range collection.YearlyRankingConfigs {
 		refreshCollection(ctx, database, svc, c.ID)
-		randomSleep(10, 35)
+		randomSleep(5, 18)
 	}
 
 	// 剧场 doulist
 	for _, t := range collection.TheaterConfigs {
 		refreshDoulist(ctx, database, svc, t.ID)
-		randomSleep(10, 35)
+		randomSleep(5, 18)
 	}
 
 	// 删过期缓存（保底，刚全量写完理论上无过期）

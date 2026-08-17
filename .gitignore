@@ -10,7 +10,7 @@ public/assets/
 
 # deps
 node_modules/
-server
+/server
 
 # env
 .env

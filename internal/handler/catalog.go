@@ -75,13 +75,10 @@ func handleCatalogRequest(w http.ResponseWriter, r *http.Request, catalogID stri
 	})
 }
 
-func handleRandomCatalog(w http.ResponseWriter, r *http.Request, extra map[string]string) {
-	pool := allDoubanCatalogIDs()
-	if len(pool) == 0 {
-		writeJSON(w, model.CatalogResponse{Metas: []model.MetaDetail{}})
-		return
-	}
+// 随机池固定为热门电影 + 热门剧集（原由配置 RandomCatalogIDs 控制，现已定死）
+var randomCatalogIDs = []string{"movie_hot_gaia", "tv_hot"}
 
+func handleRandomCatalog(w http.ResponseWriter, r *http.Request, extra map[string]string) {
 	if s := extra["skip"]; s != "" {
 		if n, err := strconv.Atoi(s); err == nil && n > 0 {
 			writeJSON(w, model.CatalogResponse{Metas: []model.MetaDetail{}})
@@ -89,30 +86,10 @@ func handleRandomCatalog(w http.ResponseWriter, r *http.Request, extra map[strin
 		}
 	}
 
-	// pick 3 random catalogs
-	ids := make([]string, len(pool))
-	copy(ids, pool)
-	rand.Shuffle(len(ids), func(i, j int) { ids[i], ids[j] = ids[j], ids[i] })
-	if len(ids) > 3 {
-		ids = ids[:3]
-	}
-
-	var resolvedIDs []string
-	for _, id := range ids {
-		if collection.IsYearlyRankingID(id) {
-			latest := collection.GetLatestYearlyRanking(id)
-			if latest != nil {
-				resolvedIDs = append(resolvedIDs, latest.ID)
-			}
-		} else {
-			resolvedIDs = append(resolvedIDs, id)
-		}
-	}
-
 	svc := api.GetService()
 	ctx := r.Context()
 	uniqueMap := make(map[int]api.DoubanSubjectCollectionItem)
-	for _, id := range resolvedIDs {
+	for _, id := range randomCatalogIDs {
 		data, err := svc.DoubanAPI.GetSubjectCollectionItems(ctx, id, 0)
 		if err != nil {
 			continue

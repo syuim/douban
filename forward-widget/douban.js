@@ -3,7 +3,7 @@
 WidgetMetadata = {
   id: "com.douban.discovery",
   title: "豆瓣榜单",
-  version: "1.0.5",
+  version: "1.0.6",
   requiredVersion: "0.0.1",
   description: "豆瓣热门电影、口碑榜、剧场与剧集榜单",
   author: "suyu",
@@ -209,6 +209,60 @@ WidgetMetadata = {
         { name: "page", title: "页码", type: "page", startPage: 1 },
       ],
     },
+    {
+      id: "douban_global_platforms",
+      title: "影视平台",
+      type: "video",
+      description: "全球流媒体平台热播榜：网飞/HBO/Disney+/爱优腾芒/B站/港台平台",
+      functionName: "loadPlatformList",
+      cacheDuration: 3600, // 1 小时缓存
+      params: [
+        {
+          name: "sort_by",
+          title: "选择频道/平台",
+          type: "enumeration",
+          value: "netflix",
+          enumOptions: [
+            { title: "🔴 Netflix (网飞)", value: "netflix" },
+            { title: "🟣 HBO", value: "hbo" },
+            { title: "🔵 Disney+ (迪士尼)", value: "disney" },
+            { title: "🍏 Apple TV+", value: "apple" },
+            { title: "📦 Amazon Prime", value: "amazon" },
+            { title: "🐧 腾讯视频", value: "tencent" },
+            { title: "🥝 爱奇艺", value: "iqiyi" },
+            { title: "👖 优酷", value: "youku" },
+            { title: "🥭 芒果TV", value: "mango" },
+            { title: "📺 BiliBili", value: "bilibili" },
+            { title: "🇭🇰 ViuTV", value: "viutv" },
+            { title: "🇹🇼 LINE TV", value: "linetv" },
+          ],
+        },
+        {
+          name: "mediaType",
+          title: "影视分类",
+          type: "enumeration",
+          value: "tv",
+          enumOptions: [
+            { title: "📺 纯净剧集 (Drama)", value: "tv" },
+            { title: "🎬 电影 (Movie)", value: "movie" },
+            { title: "🐰 动漫 (Anime)", value: "anime" },
+            { title: "🎤 综艺/真人秀", value: "variety" },
+          ],
+        },
+        {
+          name: "sortBy",
+          title: "排序方式",
+          type: "enumeration",
+          value: "hot",
+          enumOptions: [
+            { title: "🔥 平台热度榜", value: "hot" },
+            { title: "🆕 最新上线榜", value: "new" },
+            { title: "🏆 TMDB 高分榜", value: "top" },
+          ],
+        },
+        { name: "page", title: "页码", type: "page", startPage: 1 },
+      ],
+    },
   ],
 };
 
@@ -266,6 +320,10 @@ function toVideoItem(m) {
   if (rating != null && rating > 0) {
     item.rating = rating;
   }
+  // TMDB 标准分类（服务端 genre_ids）→ 中文，与影视平台模块共用 GENRE_MAP
+  if (Array.isArray(m.genre_ids) && m.genre_ids.length > 0) {
+    item.genreTitle = getGenreText(m.genre_ids);
+  }
   return item;
 }
 
@@ -287,4 +345,122 @@ function parseRating(links) {
     }
   }
   return null;
+}
+
+// ================= 影视平台模块：全球流媒体平台热播榜 =================
+// 直连 TMDB discover 接口，按平台网络/订阅商 ID 精准匹配
+// 平台 ID 库裁剪自 MakkaPakka 全网 ID 库，仅保留常用平台
+
+const PLATFORM_MAP = {
+  netflix: { network: "213", provider: "8", region: "US", name: "Netflix" },
+  hbo:     { network: "49|3186", provider: "118", region: "US", name: "HBO" },
+  disney:  { network: "2739", provider: "337", region: "US", name: "Disney+" },
+  apple:   { network: "2552", provider: "350", region: "US", name: "Apple TV+" },
+  amazon:  { network: "1024", provider: "119", region: "US", name: "Amazon" },
+  tencent: { network: "2007|3353", provider: "138", region: "CN", name: "腾讯" },
+  iqiyi:   { network: "1330", provider: "238", region: "CN", name: "爱奇艺" },
+  youku:   { network: "1419", provider: "331", region: "CN", name: "优酷" },
+  mango:   { network: "1631", provider: "1944", region: "CN", name: "芒果" },
+  bilibili:{ network: "1605", provider: "2280", region: "CN", name: "B站" },
+  viutv:   { network: "2146", provider: null, region: "HK", name: "ViuTV" },
+  linetv:  { network: "1671", provider: null, region: "TW", name: "LINE TV" },
+};
+
+const GENRE_MAP = {
+  28: "动作", 12: "冒险", 16: "动画", 35: "喜剧", 80: "犯罪", 99: "纪录片",
+  18: "剧情", 10751: "家庭", 14: "奇幻", 36: "历史", 27: "恐怖", 10402: "音乐",
+  9648: "悬疑", 10749: "爱情", 878: "科幻", 10770: "电视电影", 53: "惊悚",
+  10752: "战争", 37: "西部", 10759: "动作冒险", 10764: "真人秀", 10767: "脱口秀",
+};
+
+function getGenreText(ids) {
+  if (!ids || !Array.isArray(ids)) return "影视";
+  const genres = ids.map((id) => GENRE_MAP[id]).filter(Boolean);
+  return genres.length > 0 ? genres.slice(0, 2).join(" / ") : "影视";
+}
+
+function buildPlatformItem(item, isMovie, platformName) {
+  if (!item) return null;
+
+  const mediaType = isMovie ? "movie" : "tv";
+  const title = item.title || item.name;
+  const releaseDate = item.release_date || item.first_air_date || "";
+  const score = item.vote_average ? item.vote_average.toFixed(1) : "0.0";
+  const genreText = getGenreText(item.genre_ids);
+
+  let typeTag = isMovie ? "🎬" : "📺";
+  if (item.genre_ids && item.genre_ids.includes(16)) typeTag = "🐰";
+  if (item.genre_ids && (item.genre_ids.includes(10764) || item.genre_ids.includes(10767))) typeTag = "🎤";
+
+  return {
+    id: String(item.id),
+    type: "tmdb",
+    mediaType: mediaType,
+    title: title,
+    genreTitle: genreText,
+    description: `${typeTag} ${platformName} | ⭐ ${score}`,
+    releaseDate: releaseDate,
+    // tmdb 类型只传 raw 路径，App 自行拼接域名与尺寸
+    posterPath: item.poster_path,
+    backdropPath: item.backdrop_path,
+    rating: item.vote_average || undefined,
+  };
+}
+
+async function loadPlatformList(params = {}) {
+  try {
+    const platform = params.sort_by || "netflix";
+    const mediaType = params.mediaType || "tv";
+    const category = params.sortBy || "hot";
+    const page = Math.max(1, Number(params.page || 1));
+
+    const today = new Date().toISOString().split("T")[0];
+    const isMovie = mediaType === "movie";
+    const endpoint = isMovie ? "/discover/movie" : "/discover/tv";
+    const platformConfig = PLATFORM_MAP[platform];
+
+    const queryParams = {
+      language: "zh-CN",
+      page: page,
+    };
+
+    if (platform !== "all" && platformConfig) {
+      if (isMovie) {
+        if (!platformConfig.provider) return []; // 纯电视网无电影数据
+        queryParams.with_watch_providers = platformConfig.provider;
+        queryParams.watch_region = platformConfig.region || "US";
+      } else {
+        queryParams.with_networks = platformConfig.network;
+      }
+    }
+
+    if (mediaType === "anime") {
+      queryParams.with_genres = "16";
+    } else if (mediaType === "variety") {
+      queryParams.with_genres = "10764|10767";
+    } else if (mediaType === "tv") {
+      queryParams.without_genres = "16,10764,10767";
+    }
+
+    if (category === "hot") {
+      queryParams.sort_by = "popularity.desc";
+      queryParams["vote_count.gte"] = 2;
+    } else if (category === "new") {
+      queryParams.sort_by = isMovie ? "primary_release_date.desc" : "first_air_date.desc";
+      if (isMovie) {
+        queryParams["primary_release_date.lte"] = today;
+      } else {
+        queryParams["first_air_date.lte"] = today;
+      }
+    } else if (category === "top") {
+      queryParams.sort_by = "vote_average.desc";
+      queryParams["vote_count.gte"] = 30;
+    }
+
+    const res = await Widget.tmdb.get(endpoint, { params: queryParams });
+    return (res.results || []).map((i) => buildPlatformItem(i, isMovie, platformConfig.name)).filter(Boolean);
+  } catch (error) {
+    console.error("[loadPlatformList] 失败:", error && error.message ? error.message : error);
+    throw error;
+  }
 }

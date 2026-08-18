@@ -78,6 +78,7 @@ type TmdbCredits struct {
 }
 
 type TmdbDetailGenre struct {
+	ID   int    `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -103,6 +104,7 @@ type TmdbDetail struct {
 	Directors    []string               `json:"-"`
 	CastNames    []string               `json:"-"`
 	GenreNames   []string               `json:"-"`
+	GenreIDs     []int                  `json:"-"`
 }
 
 type TmdbSearchResult struct {

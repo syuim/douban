@@ -17,6 +17,7 @@ type MetaDetail struct {
 	Logo        string     `json:"logo,omitempty"`
 	Year        string     `json:"year,omitempty"`
 	Genres      []string   `json:"genres"`
+	GenreIDs    []int      `json:"genre_ids,omitempty"`
 	Links       []MetaLink `json:"links,omitempty"`
 	IMDBID      string     `json:"imdb_id,omitempty"`
 	TMDBID      int        `json:"tmdbId,omitempty"`

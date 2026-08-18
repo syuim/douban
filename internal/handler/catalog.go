@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"stremio-addon-douban/internal/api"
@@ -286,8 +287,31 @@ func buildCatalogMetas(r *http.Request, items []api.DoubanSubjectCollectionItem)
 		}()
 	}
 
+	// TMDB 标准分类（genre_ids）：对已映射 tmdbID 的条目并发查详情（25h 缓存），失败静默跳过
+	tmdbAPI := api.GetTmdbAPI()
+	genreIDs := make([][]int, len(items))
+	var wg sync.WaitGroup
+	for i, item := range items {
+		mapping := mappingCache[int(item.ID)]
+		if mapping == nil || mapping.TmdbID == nil {
+			continue
+		}
+		tmdbType := "movie"
+		if item.Type == "tv" {
+			tmdbType = "tv"
+		}
+		wg.Add(1)
+		go func(i int, tmdbType string, id int) {
+			defer wg.Done()
+			if detail, err := tmdbAPI.GetDetail(ctx, tmdbType, id); err == nil {
+				genreIDs[i] = detail.GenreIDs
+			}
+		}(i, tmdbType, *mapping.TmdbID)
+	}
+	wg.Wait()
+
 	metas := make([]model.MetaDetail, 0, len(items))
-	for _, item := range items {
+	for i, item := range items {
 		mapping := mappingCache[int(item.ID)]
 		var imdbID string
 		var tmdbID int
@@ -325,6 +349,7 @@ func buildCatalogMetas(r *http.Request, items []api.DoubanSubjectCollectionItem)
 			Logo:        images.Logo,
 			Year:        item.Year,
 			Genres:      genres,
+			GenreIDs:    genreIDs[i],
 			Links: []model.MetaLink{
 				{Name: "豆瓣评分：" + ratingStr(item.Rating), Category: "douban", URL: orDefault(item.URL, "#")},
 			},
@@ -381,6 +406,7 @@ func buildTmdbMetas(r *http.Request, items []api.TmdbTrendingItem, metaType stri
 			Background:  background,
 			Year:        item.Year,
 			Genres:      genres,
+			GenreIDs:    item.GenreIDs,
 			TMDBID:      item.ID,
 			Links: []model.MetaLink{
 				{

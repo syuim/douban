@@ -173,6 +173,7 @@ func (t *TmdbAPI) GetDetail(ctx context.Context, mediaType string, id int) (*Tmd
 	}
 	for _, g := range result.Genres {
 		result.GenreNames = append(result.GenreNames, g.Name)
+		result.GenreIDs = append(result.GenreIDs, g.ID)
 	}
 	return &result, nil
 }

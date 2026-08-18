@@ -40,6 +40,7 @@ func GetDB() (*sql.DB, error) {
 			initErr = fmt.Errorf("create tables: %w", err)
 			return
 		}
+		migrateSchema(db)
 
 		instance = db
 	})
@@ -54,11 +55,9 @@ func createTables(db *sql.DB) error {
 			imdb_id text,
 			trakt_id integer,
 			calibrated integer DEFAULT false,
-			last_attempted_at integer,
 			created_at integer,
 			updated_at integer
 		);
-		CREATE INDEX IF NOT EXISTS idx_mapping_pending ON douban_mapping (tmdb_id, calibrated, last_attempted_at);
 
 		CREATE TABLE IF NOT EXISTS api_cache (
 			key text PRIMARY KEY NOT NULL,
@@ -67,12 +66,15 @@ func createTables(db *sql.DB) error {
 			created_at integer
 		);
 		CREATE INDEX IF NOT EXISTS idx_api_cache_expires_at ON api_cache (expires_at);
-
-		CREATE TABLE IF NOT EXISTS collection_failures (
-			collection_id text PRIMARY KEY NOT NULL,
-			fail_count integer NOT NULL DEFAULT 1,
-			last_fail_date text NOT NULL
-		);
 	`)
 	return err
+}
+
+// migrateSchema 清理死表/死字段/死索引，幂等
+func migrateSchema(db *sql.DB) {
+	db.Exec("DROP TABLE IF EXISTS collection_failures")
+	db.Exec("DROP INDEX IF EXISTS idx_mapping_pending")
+	if _, err := db.Exec("ALTER TABLE douban_mapping DROP COLUMN last_attempted_at"); err != nil {
+		// 新数据库无该列，忽略
+	}
 }

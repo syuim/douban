@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -277,7 +278,9 @@ func buildCatalogMetas(r *http.Request, items []api.DoubanSubjectCollectionItem)
 					DoubanID: doubanID, Type: item.Type, Title: item.Title,
 				})
 				if err == nil && mapping != nil {
-					svc.PersistIDMapping(bgCtx, []api.DoubanIDMapping{*mapping}, false, "update")
+					if err := svc.PersistIDMapping(bgCtx, []api.DoubanIDMapping{*mapping}, false, "update"); err != nil {
+						log.Printf("persist mapping douban:%d: %v", doubanID, err)
+					}
 				}
 			}
 		}()
@@ -455,17 +458,6 @@ func generateID(doubanID int, imdbID string, tmdbID int) string {
 		return imdbID
 	}
 	return "douban:" + strconv.Itoa(doubanID)
-}
-
-// allDoubanCatalogIDs 全部豆瓣 catalog（排除 TMDB 分类），随机池与预热共用
-func allDoubanCatalogIDs() []string {
-	var ids []string
-	for _, c := range collection.CollectionConfigs {
-		if !c.IsTmdb {
-			ids = append(ids, c.ID)
-		}
-	}
-	return ids
 }
 
 func writeJSON(w http.ResponseWriter, v any) {

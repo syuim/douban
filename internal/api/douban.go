@@ -165,15 +165,6 @@ func (d *DoubanAPI) GetSubjectCollectionItems(ctx context.Context, collectionID 
 	return &result, nil
 }
 
-func (d *DoubanAPI) GetSubjectDetail(ctx context.Context, subjectID int) (*DoubanSubjectDetail, error) {
-	var result DoubanSubjectDetail
-	err := d.RequestJSON(ctx, "GET", fmt.Sprintf("/subject/%d", subjectID),
-		d.params(nil), nil, nil,
-		&CacheConfig{Key: fmt.Sprintf("subject_detail:%d", subjectID), TTL: model.SecondsDayPlusBuffer},
-		&result)
-	return &result, err
-}
-
 func (d *DoubanAPI) GetSubjectDetailDesc(ctx context.Context, subjectID int) (map[string]string, error) {
 	var raw struct {
 		HTML string `json:"html"`
@@ -200,13 +191,4 @@ func (d *DoubanAPI) GetSubjectDetailDesc(ctx context.Context, subjectID int) (ma
 		}
 	})
 	return result, nil
-}
-
-func (d *DoubanAPI) GetModules(ctx context.Context, modType string) (*DoubanModulesResponse, error) {
-	var result DoubanModulesResponse
-	err := d.RequestJSON(ctx, "GET", "/"+modType+"/modules",
-		d.params(nil), nil, nil,
-		&CacheConfig{Key: "douban_" + modType + "_modules", TTL: model.SecondsDayPlusBuffer},
-		&result)
-	return &result, err
 }

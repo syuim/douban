@@ -35,6 +35,10 @@ func dispatchCatalog(w http.ResponseWriter, r *http.Request, rest []string) {
 		return
 	}
 	catalogID := rest[0]
+	if len(catalogID) > 64 || strings.ContainsAny(catalogID, "/\\") {
+		http.NotFound(w, r)
+		return
+	}
 	extraStr := ""
 	if len(rest) > 1 {
 		extraStr = strings.Join(rest[1:], "/")

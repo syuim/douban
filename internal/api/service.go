@@ -142,13 +142,14 @@ func (s *Service) PersistIDMapping(ctx context.Context, mappings []DoubanIDMappi
 		}
 
 		now := time.Now().UnixMilli()
+		var execErr error
 		if mode == "ignore" {
-			database.ExecContext(ctx, `
+			_, execErr = database.ExecContext(ctx, `
 				INSERT OR IGNORE INTO douban_mapping (douban_id, tmdb_id, imdb_id, trakt_id, calibrated, created_at, updated_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?)`,
 				m.DoubanID, m.TmdbID, m.ImdbID, m.TraktID, m.Calibrated, now, now)
 		} else {
-			database.ExecContext(ctx, `
+			_, execErr = database.ExecContext(ctx, `
 				INSERT INTO douban_mapping (douban_id, tmdb_id, imdb_id, trakt_id, calibrated, created_at, updated_at)
 				VALUES (?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT(douban_id) DO UPDATE SET
@@ -158,6 +159,9 @@ func (s *Service) PersistIDMapping(ctx context.Context, mappings []DoubanIDMappi
 					updated_at = excluded.updated_at
 				WHERE douban_mapping.calibrated IS NOT true`,
 				m.DoubanID, m.TmdbID, m.ImdbID, m.TraktID, m.Calibrated, now, now)
+		}
+		if execErr != nil {
+			return fmt.Errorf("persist mapping %d: %w", m.DoubanID, execErr)
 		}
 	}
 	return nil

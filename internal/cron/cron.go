@@ -66,7 +66,9 @@ func refreshCollection(ctx context.Context, database *sql.DB, svc *api.Service, 
 			time.Sleep(time.Duration(1<<attempt) * time.Second)
 		}
 
-		database.ExecContext(ctx, "DELETE FROM api_cache WHERE key = ?", "subject_collection:"+catalogID+":0")
+		if _, err := database.ExecContext(ctx, "DELETE FROM api_cache WHERE key = ?", "subject_collection:"+catalogID+":0"); err != nil {
+			log.Printf("[cron] %s 删缓存失败: %v", catalogID, err)
+		}
 
 		_, err := svc.DoubanAPI.GetSubjectCollectionItems(ctx, catalogID, 0)
 		if err == nil {
@@ -83,7 +85,9 @@ func refreshDoulist(ctx context.Context, database *sql.DB, svc *api.Service, the
 			time.Sleep(time.Duration(1<<attempt) * time.Second)
 		}
 
-		database.ExecContext(ctx, "DELETE FROM api_cache WHERE key = ?", "doulist:"+theaterID+":0")
+		if _, err := database.ExecContext(ctx, "DELETE FROM api_cache WHERE key = ?", "doulist:"+theaterID+":0"); err != nil {
+			log.Printf("[cron] 剧场 %s 删缓存失败: %v", theaterID, err)
+		}
 
 		_, err := svc.DoubanAPI.GetDoulistItems(ctx, theaterID, 1)
 		if err == nil {

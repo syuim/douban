@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>douban 架构图 · 豆瓣榜单 Widget + catalog 服务端</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js" integrity="sha384-en/ztfPSRkGfME4KIm05joYXynqzUgbsG5nMrj/xEFAHXkeZfO3yMK8QQ+mP7p1/" crossorigin="anonymous"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: white;
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      margin-bottom: 2rem;
+    }
+    
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #22d3ee;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+    }
+    
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.875rem;
+      margin-left: 1.75rem;
+    }
+    
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+      overflow-x: auto;
+    }
+    
+    svg {
+      width: 100%;
+      min-width: 900px;
+      display: block;
+    }
+    
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    
+    .card {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    
+    .card h3 {
+      font-size: 0.875rem;
+      font-weight: 600;
+    }
+    
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.75rem;
+    }
+    
+    .card li {
+      margin-bottom: 0.375rem;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 0.5rem;
+      margin-left: auto;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .toolbar-toggle {
+      background: transparent;
+      border: none;
+      color: #475569;
+      cursor: pointer;
+      font-size: 1.25rem;
+      line-height: 1;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      transition: color 0.2s, background 0.2s;
+    }
+    .toolbar-toggle:hover { color: #94a3b8; background: rgba(30, 41, 59, 0.5); }
+    .toolbar-actions {
+      display: none;
+      gap: 0.5rem;
+    }
+    .toolbar.expanded .toolbar-actions { display: flex; }
+    .toolbar-actions button {
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      color: #94a3b8;
+      padding: 0.375rem 0.75rem;
+      border-radius: 0.375rem;
+      font-family: inherit;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .toolbar-actions button:hover {
+      background: rgba(51, 65, 85, 0.8);
+      color: white;
+      border-color: #475569;
+    }
+
+    @media print {
+      body { background: #020617; padding: 1rem; }
+      .toolbar { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="report-container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>douban 架构图 · 豆瓣榜单 Widget + catalog 服务端</h1>
+        <div class="toolbar">
+          <div class="toolbar-actions">
+            <button onclick="copyAsImage(this)">📋 Copy</button>
+            <button onclick="downloadPNG(this)">🖼️ PNG</button>
+            <button onclick="downloadPDF(this)">📄 PDF</button>
+          </div>
+          <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
+        </div>
+      </div>
+      <p class="subtitle">ForwardWidget 插件 → CF /doubanapi 反代 → Go catalog 服务 → 外部数据源（豆瓣 / TMDB / Trakt / Fanart）</p>
+    </div>
+
+    <!-- Main Diagram -->
+    <div class="diagram-container">
+      <svg viewBox="0 0 1000 1000">
+        <!-- Definitions -->
+        <defs>
+          <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <!-- Background Grid -->
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- ============ ARROWS (behind boxes) ============ -->
+
+        <!-- ① Client → /doubanapi 反代 -->
+        <line x1="150" y1="190" x2="150" y2="215" stroke="#22d3ee" stroke-width="1.5"/>
+        <line x1="150" y1="215" x2="225" y2="215" stroke="#22d3ee" stroke-width="1.5"/>
+        <line x1="225" y1="215" x2="225" y2="281" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="40" y="214" fill="#94a3b8" font-size="9">① GET /doubanapi/catalog/{type}/{id}.json</text>
+        <text x="40" y="227" fill="#94a3b8" font-size="9">?skip=N · UA: forward widget/1.0</text>
+
+        <!-- ② Client 图片直连 /url（虚线） -->
+        <line x1="340" y1="120" x2="500" y2="120" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="500" y1="120" x2="500" y2="325" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5,5"/>
+        <line x1="500" y1="325" x2="558" y2="325" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="5,5" marker-end="url(#arrowhead)"/>
+        <text x="420" y="112" fill="#22d3ee" font-size="8" text-anchor="middle">② 图片直连 /url?url=…</text>
+
+        <!-- ③ /doubanapi → Go router -->
+        <line x1="225" y1="370" x2="225" y2="430" stroke="#34d399" stroke-width="1.5"/>
+        <line x1="225" y1="430" x2="137" y2="430" stroke="#34d399" stroke-width="1.5"/>
+        <line x1="137" y1="430" x2="137" y2="481" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="232" y="424" fill="#94a3b8" font-size="8">③ HTTPS 反代 :4000</text>
+
+        <!-- ④ router → handler -->
+        <line x1="137" y1="575" x2="137" y2="608" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ⑤ handler → buildCatalogMetas -->
+        <line x1="345" y1="610" x2="345" y2="577" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ⑥ metas → SQLite 映射读写 -->
+        <line x1="440" y1="527" x2="458" y2="527" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ⑦ handler → API 层 -->
+        <line x1="242" y1="700" x2="242" y2="733" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ⑧ cron → API 层 -->
+        <line x1="542" y1="700" x2="542" y2="733" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ⑨ API 层 → /url 统一代理 -->
+        <line x1="450" y1="735" x2="450" y2="440" stroke="#fbbf24" stroke-width="1.5"/>
+        <line x1="450" y1="440" x2="700" y2="440" stroke="#fbbf24" stroke-width="1.5"/>
+        <line x1="700" y1="440" x2="700" y2="372" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="575" y="434" fill="#94a3b8" font-size="8" text-anchor="middle">⑨ POST JSON {url,method,headers,body} 统一代理</text>
+
+        <!-- ⑩ API 层 → SQLite 缓存读写 -->
+        <line x1="505" y1="735" x2="505" y2="590" stroke="#a78bfa" stroke-width="1.5"/>
+        <line x1="505" y1="590" x2="542" y2="590" stroke="#a78bfa" stroke-width="1.5"/>
+        <line x1="542" y1="590" x2="542" y2="577" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <text x="460" y="584" fill="#a78bfa" font-size="7">缓存读写</text>
+
+        <!-- ⑪ /url → 外部数据源总线 -->
+        <line x1="840" y1="325" x2="658" y2="325" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="658" y1="325" x2="658" y2="845" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="650" y="600" fill="#94a3b8" font-size="8" text-anchor="end">⑪ 出网转发</text>
+        <line x1="658" y1="510" x2="668" y2="510" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="658" y1="615" x2="668" y2="615" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="658" y1="730" x2="668" y2="730" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+        <line x1="658" y1="845" x2="668" y2="845" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+        <!-- ============ CLIENT ============ -->
+        <rect x="40" y="60" width="300" height="130" rx="8" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="190" y="86" fill="white" font-size="12" font-weight="600" text-anchor="middle">ForwardWidgets App · 豆瓣榜单</text>
+        <text x="190" y="102" fill="#94a3b8" font-size="9" text-anchor="middle">forward-widget/douban.js v1.0.5</text>
+        <text x="190" y="118" fill="#94a3b8" font-size="9" text-anchor="middle">7 模块：随便看看 / 热门电影 / 热门剧集</text>
+        <text x="190" y="132" fill="#94a3b8" font-size="9" text-anchor="middle">剧集·电影类型榜 / TMDB / 平台剧场</text>
+        <text x="190" y="148" fill="#94a3b8" font-size="9" text-anchor="middle">loadList() → catalog JSON</text>
+        <text x="190" y="166" fill="#22d3ee" font-size="8" text-anchor="middle">服务地址 https://proxy.laoz.org/doubanapi</text>
+
+        <!-- ============ CLOUDFLARE ============ -->
+        <rect x="30" y="230" width="940" height="170" rx="12" fill="rgba(251, 191, 36, 0.05)" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="42" y="248" fill="#fbbf24" font-size="10" font-weight="600">Cloudflare Edge · emby-proxy Worker（Git 集成自动部署）</text>
+
+        <rect x="100" y="280" width="250" height="90" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="225" y="306" fill="white" font-size="11" font-weight="600" text-anchor="middle">/doubanapi 反代</text>
+        <text x="225" y="322" fill="#94a3b8" font-size="9" text-anchor="middle">→ rn.127315.xyz:4000</text>
+        <text x="225" y="338" fill="#94a3b8" font-size="9" text-anchor="middle">仅 JSON catalog · 无 body 改写</text>
+        <text x="225" y="354" fill="#fbbf24" font-size="8" text-anchor="middle">无鉴权 · 依赖域名不公开</text>
+
+        <rect x="560" y="280" width="280" height="90" rx="6" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+        <text x="700" y="306" fill="white" font-size="11" font-weight="600" text-anchor="middle">/url 统一代理</text>
+        <text x="700" y="322" fill="#94a3b8" font-size="9" text-anchor="middle">POST {url,method,headers,body}</text>
+        <text x="700" y="338" fill="#94a3b8" font-size="9" text-anchor="middle">GET 目标命中 CF 边缘缓存</text>
+        <text x="700" y="354" fill="#fbbf24" font-size="8" text-anchor="middle">图片直连 /url?url=…</text>
+
+        <!-- ============ GO SERVICE ============ -->
+        <rect x="30" y="450" width="610" height="360" rx="12" fill="rgba(6, 78, 59, 0.05)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="42" y="468" fill="#34d399" font-size="10" font-weight="600">Go 服务 · Docker :4000 · rn.127315.xyz（stremio-addon-douban）</text>
+
+        <!-- Row A -->
+        <rect x="45" y="480" width="185" height="95" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="137" y="505" fill="white" font-size="11" font-weight="600" text-anchor="middle">chi Router + CORS</text>
+        <text x="137" y="521" fill="#94a3b8" font-size="9" text-anchor="middle">NotFound →</text>
+        <text x="137" y="535" fill="#94a3b8" font-size="9" text-anchor="middle">CatalogResourceHandler</text>
+        <text x="137" y="549" fill="#94a3b8" font-size="9" text-anchor="middle">手动解析 /catalog/{type}/{id}.json</text>
+
+        <rect x="250" y="480" width="190" height="95" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="345" y="505" fill="white" font-size="11" font-weight="600" text-anchor="middle">buildCatalogMetas</text>
+        <text x="345" y="521" fill="#94a3b8" font-size="9" text-anchor="middle">ID 映射批量查询</text>
+        <text x="345" y="535" fill="#94a3b8" font-size="9" text-anchor="middle">缺失 → 后台异步补齐</text>
+        <text x="345" y="549" fill="#94a3b8" font-size="9" text-anchor="middle">图片三级回退</text>
+        <text x="345" y="563" fill="#94a3b8" font-size="9" text-anchor="middle">TMDB→豆瓣→Fanart</text>
+
+        <rect x="460" y="480" width="165" height="95" rx="6" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+        <text x="542" y="505" fill="white" font-size="11" font-weight="600" text-anchor="middle">SQLite</text>
+        <text x="542" y="521" fill="#94a3b8" font-size="9" text-anchor="middle">douban_mapping</text>
+        <text x="542" y="535" fill="#94a3b8" font-size="9" text-anchor="middle">api_cache · TTL 25h</text>
+        <text x="542" y="549" fill="#94a3b8" font-size="9" text-anchor="middle">WAL · busy_timeout 5s</text>
+
+        <!-- Row B -->
+        <rect x="45" y="610" width="395" height="90" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="242" y="635" fill="white" font-size="11" font-weight="600" text-anchor="middle">CatalogResourceHandler · 榜单分发</text>
+        <text x="242" y="651" fill="#94a3b8" font-size="9" text-anchor="middle">• __random__ 随机池（热影+热剧 · 去重取 10）</text>
+        <text x="242" y="665" fill="#94a3b8" font-size="9" text-anchor="middle">• 剧场 doulist ×14 · 每页 20</text>
+        <text x="242" y="679" fill="#94a3b8" font-size="9" text-anchor="middle">• 年度榜单占位符 → 最新年份</text>
+        <text x="242" y="693" fill="#94a3b8" font-size="9" text-anchor="middle">• TMDB trending / discover · 豆瓣榜单 + genre</text>
+
+        <rect x="460" y="610" width="165" height="90" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="542" y="635" fill="white" font-size="11" font-weight="600" text-anchor="middle">cron</text>
+        <text x="542" y="651" fill="#94a3b8" font-size="9" text-anchor="middle">每日 02:00 全量刷新</text>
+        <text x="542" y="665" fill="#94a3b8" font-size="9" text-anchor="middle">随机间隔 5–18s</text>
+        <text x="542" y="679" fill="#94a3b8" font-size="9" text-anchor="middle">失败重试 3 次</text>
+
+        <!-- Row C -->
+        <rect x="45" y="735" width="580" height="55" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
+        <text x="335" y="758" fill="white" font-size="11" font-weight="600" text-anchor="middle">API 层 · BaseAPI（全部经 /url 统一代理转发）</text>
+        <text x="335" y="774" fill="#94a3b8" font-size="9" text-anchor="middle">DoubanAPI · TraktAPI · TmdbAPI · FanartAPI · singleflight 去重 · 指数退避重试</text>
+
+        <!-- ============ EXTERNAL APIS ============ -->
+        <rect x="650" y="430" width="320" height="490" rx="12" fill="rgba(30, 41, 59, 0.1)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8,4"/>
+        <text x="662" y="448" fill="#94a3b8" font-size="10" font-weight="600">外部数据源（经 /url 出网）</text>
+
+        <rect x="670" y="460" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="815" y="485" fill="white" font-size="11" font-weight="600" text-anchor="middle">豆瓣 API</text>
+        <text x="815" y="501" fill="#94a3b8" font-size="9" text-anchor="middle">m.douban.com</text>
+        <text x="815" y="517" fill="#94a3b8" font-size="9" text-anchor="middle">榜单 · 片单 · 详情 · 年度榜单</text>
+        <text x="815" y="533" fill="#94a3b8" font-size="9" text-anchor="middle">subject_collection / doulist</text>
+
+        <rect x="670" y="575" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="815" y="600" fill="white" font-size="11" font-weight="600" text-anchor="middle">TMDB API</text>
+        <text x="815" y="616" fill="#94a3b8" font-size="9" text-anchor="middle">api.themoviedb.org</text>
+        <text x="815" y="632" fill="#94a3b8" font-size="9" text-anchor="middle">trending / discover / find / genres</text>
+        <text x="815" y="648" fill="#94a3b8" font-size="9" text-anchor="middle">image.tmdb.org 海报</text>
+
+        <rect x="670" y="690" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="815" y="715" fill="white" font-size="11" font-weight="600" text-anchor="middle">Trakt API</text>
+        <text x="815" y="731" fill="#94a3b8" font-size="9" text-anchor="middle">api.trakt.tv</text>
+        <text x="815" y="747" fill="#94a3b8" font-size="9" text-anchor="middle">标题搜索 · IMDb 反查</text>
+
+        <rect x="670" y="805" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="815" y="830" fill="white" font-size="11" font-weight="600" text-anchor="middle">Fanart API</text>
+        <text x="815" y="846" fill="#94a3b8" font-size="9" text-anchor="middle">webservice.fanart.tv</text>
+        <text x="815" y="862" fill="#94a3b8" font-size="9" text-anchor="middle">海报 / 背景 / Logo</text>
+
+        <!-- ============ LEGEND（界外） ============ -->
+        <rect x="30" y="940" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>
+        <text x="52" y="949" fill="#94a3b8" font-size="8">Frontend</text>
+        <rect x="140" y="940" width="16" height="10" rx="2" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1"/>
+        <text x="162" y="949" fill="#94a3b8" font-size="8">Backend</text>
+        <rect x="250" y="940" width="16" height="10" rx="2" fill="rgba(76, 29, 149, 0.4)" stroke="#a78bfa" stroke-width="1"/>
+        <text x="272" y="949" fill="#94a3b8" font-size="8">Database</text>
+        <rect x="360" y="940" width="16" height="10" rx="2" fill="rgba(120, 53, 15, 0.3)" stroke="#fbbf24" stroke-width="1"/>
+        <text x="382" y="949" fill="#94a3b8" font-size="8">Cloudflare</text>
+        <rect x="470" y="940" width="16" height="10" rx="2" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1"/>
+        <text x="492" y="949" fill="#94a3b8" font-size="8">External API</text>
+        <line x1="600" y1="943" x2="616" y2="943" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="3,3"/>
+        <text x="622" y="949" fill="#94a3b8" font-size="8">图片直连 / 异步补齐</text>
+      </svg>
+    </div>
+
+    <!-- Info Cards -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>请求链路</h3>
+        </div>
+        <ul>
+          <li>• Widget loadList → GET /doubanapi/catalog/{type}/{id}.json?skip=N</li>
+          <li>• CF Worker 反代 → Go :4000（仅 JSON，无 body 改写）</li>
+          <li>• 榜单分发 → ID 映射 + 图片回退 → 返回 metas</li>
+          <li>• 图片 URL 直出 /url?url=…，App 直连 CF 边缘缓存</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>缓存与预热</h3>
+        </div>
+        <ul>
+          <li>• SQLite api_cache TTL 25h · singleflight 请求去重</li>
+          <li>• cron 每日 02:00 全量刷新（榜单 + 年度 + 剧场 doulist）</li>
+          <li>• 随机间隔 5–18s 控制在半小时内 · 失败重试 3 次</li>
+          <li>• ID 映射缺失时后台异步补齐并落库</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>ID 与图片来源</h3>
+        </div>
+        <ul>
+          <li>• ID 优先级：tmdb → imdb → douban 兜底</li>
+          <li>• 图片三级回退：TMDB → 豆瓣 → Fanart</li>
+          <li>• 外部 API 全部经 /url 统一代理（POST JSON），GET 可命中 CF 缓存</li>
+          <li>• 部署：Docker alpine + modernc.org/sqlite（无 CGO）</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <p class="footer">
+      douban · ForwardWidget 豆瓣榜单 Widget · Go 1.24 + chi + SQLite · rn.127315.xyz:4000 · 2026-08-18
+    </p>
+  </div>
+
+  <script>
+    async function copyAsImage(btn) {
+      const orig = btn.textContent;
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        btn.textContent = '✓ Copied!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPNG(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const link = document.createElement('a');
+        link.download = 'diagram.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+
+    async function downloadPDF(btn) {
+      const orig = btn.textContent;
+      btn.textContent = '⏳ ...';
+      try {
+        const el = document.getElementById('report-container');
+        const r = el.getBoundingClientRect();
+        const pad = 32;
+        const canvas = await html2canvas(document.body, { backgroundColor: '#020617', scale: 2, useCORS: true, ignoreElements: (e) => e.classList && e.classList.contains('toolbar'), x: r.left + window.scrollX - pad, y: r.top + window.scrollY - pad, width: r.width + pad * 2, height: r.height + pad * 2 });
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const orientation = canvas.width > canvas.height ? 'landscape' : 'portrait';
+        const pdf = new jsPDF({ orientation, unit: 'px', format: [canvas.width, canvas.height], hotfixes: ['px_scaling'] });
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('diagram.pdf');
+        btn.textContent = '✓ Done!';
+      } catch (e) {
+        btn.textContent = '✗ Failed';
+      }
+      setTimeout(() => btn.textContent = orig, 2000);
+    }
+  </script>
+</body>
+</html>

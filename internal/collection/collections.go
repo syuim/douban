@@ -22,7 +22,6 @@ type YearlyRankingItem struct {
 const (
 	MovieYearlyRankingID = "__movie_yearly_ranking__"
 	TVYearlyRankingID    = "__tv_yearly_ranking__"
-	RandomCatalogID      = "__random__"
 
 	TmdbTrendingMovieID = "tmdb_trending_movie"
 	TmdbTrendingTvID    = "tmdb_trending_tv"
@@ -61,7 +60,7 @@ func init() {
 	}
 }
 
-var MovieGenreConfigs = []struct{ ID, Name string }{
+var movieGenreConfigs = []struct{ ID, Name string }{
 	{"film_genre_27", "剧情片榜"}, {"movie_comedy", "喜剧片榜"}, {"movie_love", "爱情片榜"},
 	{"movie_action", "动作片榜"}, {"movie_scifi", "科幻片榜"}, {"film_genre_31", "动画片榜"},
 	{"film_genre_32", "悬疑片榜"}, {"film_genre_46", "犯罪片榜"}, {"film_genre_33", "惊悚片榜"},
@@ -73,7 +72,7 @@ var MovieGenreConfigs = []struct{ ID, Name string }{
 	{"ECCEPGM4Y", "运动片榜"}, {"film_genre_36", "短片榜"},
 }
 
-var TVGenreConfigs = []struct{ ID, Name string }{
+var tvGenreConfigs = []struct{ ID, Name string }{
 	{"EC74443FY", "大陆剧榜"}, {"ECFA5DI7Q", "美剧榜"}, {"ECVACXBWI", "英剧榜"},
 	{"ECNA46YBA", "日剧榜"}, {"ECBE5CBEI", "韩剧榜"}, {"ECVM47WUA", "港剧榜"},
 	{"ECBI5EL6A", "台剧榜"}, {"EC6I5FYHA", "欧洲剧榜"},
@@ -90,7 +89,7 @@ func init() {
 		{ManifestCatalog: model.ManifestCatalog{ID: "movie_showing", Name: "影院热映", Type: "movie"}, IsDefault: true},
 	}
 
-	for _, g := range MovieGenreConfigs {
+	for _, g := range movieGenreConfigs {
 		CollectionConfigs = append(CollectionConfigs, CollectionConfig{
 			ManifestCatalog: model.ManifestCatalog{ID: g.ID, Name: g.Name, Type: "movie"},
 			HasGenre:        true,
@@ -119,7 +118,7 @@ func init() {
 	}
 	CollectionConfigs = append(CollectionConfigs, tvConfigs...)
 
-	for _, g := range TVGenreConfigs {
+	for _, g := range tvGenreConfigs {
 		CollectionConfigs = append(CollectionConfigs, CollectionConfig{
 			ManifestCatalog: model.ManifestCatalog{ID: g.ID, Name: g.Name, Type: "series"},
 			HasGenre:        true,
@@ -150,16 +149,6 @@ func init() {
 		YearlyRankingConfigs = append(YearlyRankingConfigs, CollectionConfig{
 			ManifestCatalog: model.ManifestCatalog{ID: item.ID, Name: item.Name, Type: "series"},
 		})
-	}
-}
-
-var DefaultCollectionIDs []string
-
-func init() {
-	for _, c := range CollectionConfigs {
-		if c.IsDefault {
-			DefaultCollectionIDs = append(DefaultCollectionIDs, c.ID)
-		}
 	}
 }
 

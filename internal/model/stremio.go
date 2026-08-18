@@ -1,17 +1,10 @@
 package model
 
 type ManifestCatalog struct {
-	ID    string        `json:"id"`
-	Name  string        `json:"name"`
-	Type  string        `json:"type"`
-	Extra []CatalogExtra `json:"extra,omitempty"`
-	Genres []string     `json:"genres,omitempty"`
-}
-
-type CatalogExtra struct {
-	Name         string   `json:"name"`
-	Options      []string `json:"options,omitempty"`
-	OptionsLimit int      `json:"optionsLimit,omitempty"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	Type    string   `json:"type"`
+	Genres  []string `json:"genres,omitempty"`
 }
 
 type MetaDetail struct {
@@ -24,9 +17,6 @@ type MetaDetail struct {
 	Logo        string     `json:"logo,omitempty"`
 	Year        string     `json:"year,omitempty"`
 	Genres      []string   `json:"genres"`
-	Language    string     `json:"language,omitempty"`
-	Country     string     `json:"country,omitempty"`
-	Awards      string     `json:"awards,omitempty"`
 	Links       []MetaLink `json:"links,omitempty"`
 	IMDBID      string     `json:"imdb_id,omitempty"`
 	TMDBID      int        `json:"tmdbId,omitempty"`
@@ -47,7 +37,6 @@ type CatalogResponse struct {
 }
 
 const (
-	SecondsPerHour       = 3600
 	SecondsPerDay        = 86400
 	SecondsPerWeek       = 604800
 	SecondsDayPlusBuffer = 90000 // 25h：每日 2:00 全量拉取时旧缓存仍有 1h 余量

@@ -3,7 +3,7 @@
 WidgetMetadata = {
   id: "com.douban.discovery",
   title: "豆瓣榜单",
-  version: "1.0.6",
+  version: "1.0.7",
   requiredVersion: "0.0.1",
   description: "豆瓣热门电影、口碑榜、剧场与剧集榜单",
   author: "suyu",
@@ -173,6 +173,27 @@ WidgetMetadata = {
             { title: "TMDB 热门动漫", value: "series:tmdb_discover_anime" },
           ],
         },
+        {
+          name: "platform",
+          title: "平台筛选",
+          type: "enumeration",
+          value: "all",
+          enumOptions: [
+            { title: "🌐 全部平台", value: "all" },
+            { title: "🔴 Netflix (网飞)", value: "netflix" },
+            { title: "🟣 HBO", value: "hbo" },
+            { title: "🔵 Disney+ (迪士尼)", value: "disney" },
+            { title: "🍏 Apple TV+", value: "apple" },
+            { title: "📦 Amazon Prime", value: "amazon" },
+            { title: "🐧 腾讯视频", value: "tencent" },
+            { title: "🥝 爱奇艺", value: "iqiyi" },
+            { title: "👖 优酷", value: "youku" },
+            { title: "🥭 芒果TV", value: "mango" },
+            { title: "📺 BiliBili", value: "bilibili" },
+            { title: "🇭🇰 ViuTV", value: "viutv" },
+            { title: "🇹🇼 LINE TV", value: "linetv" },
+          ],
+        },
         { name: "page", title: "页码", type: "page", startPage: 1 },
       ],
     },
@@ -268,12 +289,25 @@ WidgetMetadata = {
 
 async function loadList(params = {}) {
   try {
-    const server = (params.server || "https://proxy.laoz.org/douban").replace(/\/+$/, "");
+    const server = (params.server || "https://proxy.laoz.org/doubanapi").replace(/\/+$/, "");
     const [type, catalogId] = String(params.catalog || "movie:movie_hot_gaia").split(":");
     const page = Math.max(1, Number(params.page || 1));
     const skip = (page - 1) * 20;
 
-    const url = `${server}/catalog/${type}/${catalogId}.json?skip=${skip}`;
+    let url;
+    const platformConfig = params.platform && params.platform !== "all" ? PLATFORM_MAP[params.platform] : null;
+    if (platformConfig) {
+      // 平台筛选走通用 TMDB discover catalog（trending 接口不支持平台过滤）
+      // extra 参数须编码在路径段（服务端 parseExtra 只解析 .json 前路径，query 仅 skip/genre）
+      const isMovie = type === "movie";
+      const discoverCatalog = isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv";
+      const mediaType = catalogId === "tmdb_discover_anime" ? "anime" : "tv";
+      const query = buildDiscoverQuery(platformConfig, isMovie, { mediaType, sortBy: "hot" });
+      url = `${server}/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
+    } else {
+      url = `${server}/catalog/${type}/${catalogId}.json?skip=${skip}`;
+    }
+
     const res = await Widget.http.get(url, { headers: { "User-Agent": "forward widget/1.0" } });
     const metas = (res.data && res.data.metas) || [];
     // 过滤无 tmdb 海报的条目（豆瓣图/缺图），App 无法展示且可能整批拒收
@@ -335,12 +369,17 @@ function imagePath(url) {
   return m ? "/" + m[1] : undefined;
 }
 
-// links: [{ name: "豆瓣评分：7.6", category: "douban", url }]
+// links: [{ name: "豆瓣评分：7.6", category: "douban", url }] 或 [{ name: "TMDB 评分：8.1", ... }]
 function parseRating(links) {
   if (!Array.isArray(links)) return null;
   for (const link of links) {
-    if (link && typeof link.name === "string" && link.name.startsWith("豆瓣评分：")) {
-      const n = parseFloat(link.name.slice("豆瓣评分：".length));
+    if (link && typeof link.name === "string") {
+      let n = NaN;
+      if (link.name.startsWith("豆瓣评分：")) {
+        n = parseFloat(link.name.slice("豆瓣评分：".length));
+      } else if (link.name.startsWith("TMDB 评分：")) {
+        n = parseFloat(link.name.slice("TMDB 评分：".length));
+      }
       if (!Number.isNaN(n)) return n;
     }
   }
@@ -379,86 +418,62 @@ function getGenreText(ids) {
   return genres.length > 0 ? genres.slice(0, 2).join(" / ") : "影视";
 }
 
-function buildPlatformItem(item, isMovie, platformName) {
-  if (!item) return null;
+// 平台/影视分类/排序 → TMDB discover 查询参数（服务端 tmdb_discover catalog 白名单透传）
+function buildDiscoverQuery(platformConfig, isMovie, opts = {}) {
+  const q = [];
+  if (platformConfig) {
+    if (isMovie) {
+      if (platformConfig.provider) {
+        q.push("with_watch_providers=" + encodeURIComponent(platformConfig.provider));
+        q.push("watch_region=" + encodeURIComponent(platformConfig.region || "US"));
+      }
+    } else {
+      q.push("with_networks=" + encodeURIComponent(platformConfig.network));
+    }
+  }
+  const mediaType = opts.mediaType || "tv";
+  if (mediaType === "anime") {
+    q.push("with_genres=16");
+  } else if (mediaType === "variety") {
+    q.push("with_genres=10764%7C10767");
+  } else if (mediaType === "tv") {
+    q.push("without_genres=16,10764,10767");
+  }
 
-  const mediaType = isMovie ? "movie" : "tv";
-  const title = item.title || item.name;
-  const releaseDate = item.release_date || item.first_air_date || "";
-  const score = item.vote_average ? item.vote_average.toFixed(1) : "0.0";
-  const genreText = getGenreText(item.genre_ids);
-
-  let typeTag = isMovie ? "🎬" : "📺";
-  if (item.genre_ids && item.genre_ids.includes(16)) typeTag = "🐰";
-  if (item.genre_ids && (item.genre_ids.includes(10764) || item.genre_ids.includes(10767))) typeTag = "🎤";
-
-  return {
-    id: String(item.id),
-    type: "tmdb",
-    mediaType: mediaType,
-    title: title,
-    genreTitle: genreText,
-    description: `${typeTag} ${platformName} | ⭐ ${score}`,
-    releaseDate: releaseDate,
-    // tmdb 类型只传 raw 路径，App 自行拼接域名与尺寸
-    posterPath: item.poster_path,
-    backdropPath: item.backdrop_path,
-    rating: item.vote_average || undefined,
-  };
+  const category = opts.sortBy || "hot";
+  if (category === "hot") {
+    q.push("sort_by=popularity.desc", "vote_count.gte=2");
+  } else if (category === "new") {
+    q.push("sort_by=" + (isMovie ? "primary_release_date.desc" : "first_air_date.desc"));
+    if (opts.today) q.push((isMovie ? "primary_release_date.lte=" : "first_air_date.lte=") + opts.today);
+  } else if (category === "top") {
+    q.push("sort_by=vote_average.desc", "vote_count.gte=30");
+  }
+  return q;
 }
 
 async function loadPlatformList(params = {}) {
   try {
+    const server = (params.server || "https://proxy.laoz.org/doubanapi").replace(/\/+$/, "");
     const platform = params.sort_by || "netflix";
     const mediaType = params.mediaType || "tv";
     const category = params.sortBy || "hot";
     const page = Math.max(1, Number(params.page || 1));
+    const skip = (page - 1) * 20;
 
-    const today = new Date().toISOString().split("T")[0];
     const isMovie = mediaType === "movie";
-    const endpoint = isMovie ? "/discover/movie" : "/discover/tv";
+    const type = isMovie ? "movie" : "series";
     const platformConfig = PLATFORM_MAP[platform];
+    if (isMovie && !platformConfig.provider) return []; // 纯电视网无电影数据
 
-    const queryParams = {
-      language: "zh-CN",
-      page: page,
-    };
-
-    if (platform !== "all" && platformConfig) {
-      if (isMovie) {
-        if (!platformConfig.provider) return []; // 纯电视网无电影数据
-        queryParams.with_watch_providers = platformConfig.provider;
-        queryParams.watch_region = platformConfig.region || "US";
-      } else {
-        queryParams.with_networks = platformConfig.network;
-      }
-    }
-
-    if (mediaType === "anime") {
-      queryParams.with_genres = "16";
-    } else if (mediaType === "variety") {
-      queryParams.with_genres = "10764|10767";
-    } else if (mediaType === "tv") {
-      queryParams.without_genres = "16,10764,10767";
-    }
-
-    if (category === "hot") {
-      queryParams.sort_by = "popularity.desc";
-      queryParams["vote_count.gte"] = 2;
-    } else if (category === "new") {
-      queryParams.sort_by = isMovie ? "primary_release_date.desc" : "first_air_date.desc";
-      if (isMovie) {
-        queryParams["primary_release_date.lte"] = today;
-      } else {
-        queryParams["first_air_date.lte"] = today;
-      }
-    } else if (category === "top") {
-      queryParams.sort_by = "vote_average.desc";
-      queryParams["vote_count.gte"] = 30;
-    }
-
-    const res = await Widget.tmdb.get(endpoint, { params: queryParams });
-    return (res.results || []).map((i) => buildPlatformItem(i, isMovie, platformConfig.name)).filter(Boolean);
+    const query = buildDiscoverQuery(platformConfig, isMovie, {
+      mediaType, sortBy: category, today: new Date().toISOString().split("T")[0],
+    });
+    // extra 参数须编码在路径段（服务端 parseExtra 只解析 .json 前路径，query 仅 skip/genre）
+    const url = `${server}/catalog/${type}/${isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv"}/${query.join("&")}.json?skip=${skip}`;
+    const res = await Widget.http.get(url, { headers: { "User-Agent": "forward widget/1.0" } });
+    const metas = (res.data && res.data.metas) || [];
+    return metas.map(toVideoItem).filter((it) => it.posterPath);
   } catch (error) {
     console.error("[loadPlatformList] 失败:", error && error.message ? error.message : error);
     throw error;

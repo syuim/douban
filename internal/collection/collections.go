@@ -26,6 +26,8 @@ const (
 	TmdbTrendingMovieID = "tmdb_trending_movie"
 	TmdbTrendingTvID    = "tmdb_trending_tv"
 	TmdbDiscoverAnimeID = "tmdb_discover_anime"
+	TmdbDiscoverMovieID = "tmdb_discover_movie"
+	TmdbDiscoverTvID    = "tmdb_discover_tv"
 )
 
 var MovieYearlyRanking = []YearlyRankingItem{
@@ -134,6 +136,8 @@ func init() {
 		CollectionConfig{ManifestCatalog: model.ManifestCatalog{ID: TmdbTrendingMovieID, Name: "TMDB 本周热门电影", Type: "movie"}, IsTmdb: true, IsDefault: true},
 		CollectionConfig{ManifestCatalog: model.ManifestCatalog{ID: TmdbTrendingTvID, Name: "TMDB 本周热门剧集", Type: "series"}, IsTmdb: true, IsDefault: true},
 		CollectionConfig{ManifestCatalog: model.ManifestCatalog{ID: TmdbDiscoverAnimeID, Name: "TMDB 热门动漫", Type: "series"}, IsTmdb: true, IsDefault: true},
+		CollectionConfig{ManifestCatalog: model.ManifestCatalog{ID: TmdbDiscoverMovieID, Name: "TMDB 热门电影", Type: "movie"}, IsTmdb: true},
+		CollectionConfig{ManifestCatalog: model.ManifestCatalog{ID: TmdbDiscoverTvID, Name: "TMDB 热门剧集", Type: "series"}, IsTmdb: true},
 	)
 }
 

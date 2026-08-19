@@ -29,15 +29,13 @@ global.Widget = {
       if (url.includes("/catalog/series/tmdb_discover_anime.json")) {
         return { data: { metas: animeFixtures } };
       }
+      if (url.includes("/catalog/series/tmdb_discover_tv/")) {
+        return { data: { metas: tmdbDiscoverTvFixtures } };
+      }
+      if (url.includes("/catalog/movie/tmdb_discover_movie/")) {
+        return { data: { metas: tmdbDiscoverMovieFixtures } };
+      }
       throw new Error("unmocked url: " + url);
-    },
-  },
-  tmdb: {
-    // tmdb.get 直接返回 body（无 .data 包装），params 记录在 opts.params
-    get: async (api, opts) => {
-      calls.push({ api, params: opts && opts.params });
-      if (api.includes("/discover/")) return platformFixtures;
-      throw new Error("unmocked tmdb api: " + api);
     },
   },
   storage: { _m: {}, get(k) { return this._m[k]; }, set(k, v) { this._m[k] = v; } },
@@ -78,20 +76,26 @@ const tmdbPoster = "https://proxy.laoz.org/url?url=https%3A%2F%2Fimage.tmdb.org%
 const tmdbMovieFixtures = [{ id: "tmdb:movie:969681", type: "movie", name: "蜘蛛侠", year: "2026", poster: tmdbPoster, genre_ids: [28, 878] }];
 const tmdbTvFixtures = [{ id: "tmdb:tv:108978", type: "series", name: "侠探杰克", year: "2022", poster: tmdbPoster, genre_ids: [80, 18] }];
 const animeFixtures = [{ id: "tmdb:movie:1315772", type: "series", name: "小黄人与大怪兽", year: "2026", poster: tmdbPoster, genre_ids: [16, 10751] }];
-// 影视平台模块：TMDB discover 标准响应（genre_ids 混合综艺 10764 用于类型标签断言）
-const platformFixtures = {
-  results: [
-    { id: 123456, name: "平台剧集示例", first_air_date: "2025-01-15", vote_average: 8.4,
-      genre_ids: [18, 10764], poster_path: "/p1.jpg", backdrop_path: "/b1.jpg" },
-    { id: 234567, title: "平台电影示例", release_date: "2025-03-01", vote_average: 7.2,
-      genre_ids: [28, 878], poster_path: "/p2.jpg" },
-  ],
-};
+// 影视平台模块（模块 8）走 catalog 后的服务端响应结构（buildTmdbMetas 输出）
+const tmdbDiscoverTvFixtures = [
+  {
+    id: "tmdb:tv:123456", type: "series", name: "平台剧集示例", year: "2025",
+    poster: tmdbPoster, genre_ids: [18, 10764],
+    links: [{ name: "TMDB 评分：8.4", category: "tmdb", url: "https://www.themoviedb.org/tv/123456" }],
+  },
+];
+const tmdbDiscoverMovieFixtures = [
+  {
+    id: "tmdb:movie:234567", type: "movie", name: "平台电影示例", year: "2025",
+    poster: tmdbPoster, genre_ids: [28, 878],
+    links: [{ name: "TMDB 评分：7.2", category: "tmdb", url: "https://www.themoviedb.org/movie/234567" }],
+  },
+];
 
 (async () => {
   // 1. 分页换算与请求构造
   const list = await loadList({ page: 2, catalog: "movie:movie_hot_gaia" });
-  assert.equal(calls[0].url, "https://proxy.laoz.org/douban/catalog/movie/movie_hot_gaia.json?skip=20");
+  assert.equal(calls[0].url, "https://proxy.laoz.org/doubanapi/catalog/movie/movie_hot_gaia.json?skip=20");
   assert.equal(calls[0].headers["User-Agent"], "forward widget/1.0");
 
   // 2. tmdb id 输出字符串数字（与 MakkaPakka 一致，数字类型会被 App 拒收）+ mediaType
@@ -161,54 +165,63 @@ const platformFixtures = {
   assert.equal(anime[0].mediaType, "movie");
   assert.equal(anime[0].genreTitle, "动画 / 家庭");
 
-  // 12. 影视平台：剧集走 with_networks（Netflix=213）+ 纯净剧集过滤 + 热度排序
+  // 12. 影视平台（模块 8）：剧集走 with_networks（Netflix=213）+ 纯净剧集过滤 + 热度排序
   const platformTv = await loadPlatformList({ sort_by: "netflix", mediaType: "tv", sortBy: "hot", page: 1 });
   const tvCall = calls[calls.length - 1];
-  assert.equal(tvCall.api, "/discover/tv");
-  assert.equal(tvCall.params.with_networks, "213");
-  assert.equal(tvCall.params.without_genres, "16,10764,10767");
-  assert.equal(tvCall.params.sort_by, "popularity.desc");
-  assert.equal(tvCall.params.language, "zh-CN");
-  assert.equal(platformTv.length, 2);
+  assert.ok(tvCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=213"));
+  assert.ok(tvCall.url.includes("without_genres=16,10764,10767"));
+  assert.ok(tvCall.url.includes("sort_by=popularity.desc"));
+  assert.ok(tvCall.url.includes("vote_count.gte=2"));
+  assert.ok(tvCall.url.endsWith(".json?skip=0"), "extra 在 .json 前路径段，skip 走 query");
+  assert.equal(platformTv.length, 1);
 
-  // 13. 影视平台：字段映射（字符串 id + raw 海报路径 + 数字评分 + 不泄漏原始键）
+  // 13. 影视平台：字段映射（catalog 服务端响应 → 字符串 id + raw 海报 + TMDB 评分）
   const tv0 = platformTv[0];
   assert.equal(tv0.id, "123456");
   assert.equal(typeof tv0.id, "string");
   assert.equal(tv0.type, "tmdb");
   assert.equal(tv0.mediaType, "tv");
-  assert.equal(tv0.posterPath, "/p1.jpg");
-  assert.equal(tv0.backdropPath, "/b1.jpg");
-  assert.equal(tv0.poster_path, undefined);
+  assert.equal(tv0.posterPath, "/tmdb.jpg");
+  assert.equal(tv0.poster, undefined);
   assert.equal(tv0.rating, 8.4);
   assert.equal(typeof tv0.rating, "number");
-  assert.equal(tv0.releaseDate, "2025-01-15");
-  assert.ok(tv0.description.includes("Netflix"));
-  assert.ok(tv0.description.includes("⭐ 8.4"));
-  // mediaType 由请求场景决定：/discover/tv 返回的条目全部映射为 tv
-  assert.equal(platformTv[1].mediaType, "tv");
+  assert.equal(tv0.releaseDate, "2025");
+  assert.equal(tv0.genreTitle, "剧情 / 真人秀");
 
   // 14. 影视平台：电影走 with_watch_providers + watch_region；动漫/综艺走 with_genres
   const platformMovie = await loadPlatformList({ sort_by: "tencent", mediaType: "movie", sortBy: "top", page: 2 });
   let movieCall = calls[calls.length - 1];
-  assert.equal(movieCall.api, "/discover/movie");
-  assert.equal(movieCall.params.with_watch_providers, "138");
-  assert.equal(movieCall.params.watch_region, "CN");
-  assert.equal(movieCall.params.sort_by, "vote_average.desc");
-  assert.equal(movieCall.params["vote_count.gte"], 30);
-  assert.equal(movieCall.params.page, 2);
+  assert.ok(movieCall.url.includes("/catalog/movie/tmdb_discover_movie/with_watch_providers=138"));
+  assert.ok(movieCall.url.includes("watch_region=CN"));
+  assert.ok(movieCall.url.includes("sort_by=vote_average.desc"));
+  assert.ok(movieCall.url.includes("vote_count.gte=30"));
   assert.equal(platformMovie[0].mediaType, "movie");
   await loadPlatformList({ sort_by: "hbo", mediaType: "anime", sortBy: "new" });
   let animeCall = calls[calls.length - 1];
-  assert.equal(animeCall.api, "/discover/tv");
-  assert.equal(animeCall.params.with_networks, "49|3186");
-  assert.equal(animeCall.params.with_genres, "16");
-  assert.equal(animeCall.params.sort_by, "first_air_date.desc");
-  assert.ok(animeCall.params["first_air_date.lte"]);
+  assert.ok(animeCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=49%7C3186"));
+  assert.ok(animeCall.url.includes("with_genres=16"));
+  assert.ok(animeCall.url.includes("sort_by=first_air_date.desc"));
+  assert.ok(animeCall.url.includes("first_air_date.lte="));
 
   // 15. 影视平台：纯电视网（ViuTV）无电影 provider → 空数组，不请求
   const viutvMovie = await loadPlatformList({ sort_by: "viutv", mediaType: "movie" });
   assert.equal(viutvMovie.length, 0);
+
+  // 16. 模块 6 平台筛选：trending catalog + platform 参数转 tmdb_discover（Netflix 电影）
+  const pf = await loadList({ catalog: "movie:tmdb_trending_movie", platform: "netflix" });
+  const pfCall = calls[calls.length - 1];
+  assert.ok(pfCall.url.includes("/catalog/movie/tmdb_discover_movie/with_watch_providers=8"));
+  assert.ok(pfCall.url.includes("watch_region=US"));
+  assert.equal(pf[0].id, "234567");
+  assert.equal(pf[0].mediaType, "movie");
+  // 平台=全部/缺省时保持原 trending 请求
+  await loadList({ catalog: "movie:tmdb_trending_movie", platform: "all" });
+  assert.ok(calls[calls.length - 1].url.includes("/catalog/movie/tmdb_trending_movie.json?skip=0"));
+  // 动漫 catalog 走平台筛选时保留 with_genres=16
+  await loadList({ catalog: "series:tmdb_discover_anime", platform: "hbo" });
+  const animePfCall = calls[calls.length - 1];
+  assert.ok(animePfCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=49%7C3186"));
+  assert.ok(animePfCall.url.includes("with_genres=16"));
 
   console.log("✅ ok", { calls: calls.length });
 })().catch((e) => { console.error("❌", e); process.exit(1); });

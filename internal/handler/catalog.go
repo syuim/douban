@@ -231,6 +231,8 @@ func handleTmdbCatalog(w http.ResponseWriter, r *http.Request, catalog *collecti
 		data, _ = tmdbAPI.Trending(ctx, "movie", "week", page)
 	case collection.TmdbTrendingTvID:
 		data, _ = tmdbAPI.Trending(ctx, "tv", "week", page)
+	case collection.TmdbDiscoverMovieID, collection.TmdbDiscoverTvID:
+		data, _ = tmdbAPI.Discover(ctx, tmdbType, discoverParams(extra), page)
 	}
 
 	if data == nil || len(data.Results) == 0 {
@@ -460,6 +462,30 @@ func toGenreMap(gm *api.TmdbGenreMap) map[int]string {
 		}
 	}
 	return m
+}
+
+// discoverParamAllowlist tmdb_discover catalog 可透传的 Discover 查询参数白名单，
+// 平台（with_networks/with_watch_providers/watch_region）、类型、排序与日期过滤
+var discoverParamAllowlist = map[string]bool{
+	"with_networks":            true,
+	"with_watch_providers":     true,
+	"watch_region":             true,
+	"with_genres":              true,
+	"without_genres":           true,
+	"sort_by":                  true,
+	"vote_count.gte":           true,
+	"primary_release_date.lte": true,
+	"first_air_date.lte":       true,
+}
+
+func discoverParams(extra map[string]string) map[string]string {
+	p := make(map[string]string)
+	for k, v := range extra {
+		if discoverParamAllowlist[k] && v != "" {
+			p[k] = v
+		}
+	}
+	return p
 }
 
 func ratingStr(r *api.DoubanRating) string {

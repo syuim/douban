@@ -11,6 +11,7 @@ import (
 	"stremio-addon-douban/internal/api"
 	"stremio-addon-douban/internal/collection"
 	"stremio-addon-douban/internal/db"
+	"stremio-addon-douban/internal/failwatch"
 )
 
 var isRunning atomic.Bool
@@ -61,6 +62,10 @@ func RunScheduledTask() {
 
 // refreshCollection 删缓存 → 拉第 1 页 → 最多重试 2 次，失败跳过
 func refreshCollection(ctx context.Context, database *sql.DB, svc *api.Service, catalogID string) {
+	if failwatch.Disabled(ctx, failwatch.KindCollection, catalogID) {
+		log.Printf("[cron] %s 连续失败已停用，跳过拉取", catalogID)
+		return
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			time.Sleep(time.Duration(1<<attempt) * time.Second)
@@ -80,6 +85,10 @@ func refreshCollection(ctx context.Context, database *sql.DB, svc *api.Service, 
 
 // refreshDoulist 删缓存 → 拉第 1 页 → 最多重试 2 次，失败跳过
 func refreshDoulist(ctx context.Context, database *sql.DB, svc *api.Service, theaterID string) {
+	if failwatch.Disabled(ctx, failwatch.KindDoulist, theaterID) {
+		log.Printf("[cron] 剧场 %s 连续失败已停用，跳过拉取", theaterID)
+		return
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		if attempt > 0 {
 			time.Sleep(time.Duration(1<<attempt) * time.Second)

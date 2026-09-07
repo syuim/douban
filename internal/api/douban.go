@@ -3,12 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
 
+	"stremio-addon-douban/internal/failwatch"
 	"stremio-addon-douban/internal/model"
 )
 
@@ -80,6 +82,9 @@ func (d *DoubanAPI) GetSubjectCollectionCategory(ctx context.Context, collection
 // 复用统一代理/缓存/重试链路；每页 25 条，按 total 自动翻页。
 // maxPages 为 0 时拉全量，大于 0 时最多拉取指定页数。
 func (d *DoubanAPI) GetDoulistItems(ctx context.Context, doulistID string, maxPages int) ([]DoubanDoulistItem, error) {
+	if failwatch.Disabled(ctx, failwatch.KindDoulist, doulistID) {
+		return nil, &APIError{Status: 404, Body: "doulist disabled: consecutive 404s"}
+	}
 	var all []DoubanDoulistItem
 	start := 0
 	const pageSize = 25
@@ -93,7 +98,13 @@ func (d *DoubanAPI) GetDoulistItems(ctx context.Context, doulistID string, maxPa
 			&CacheConfig{Key: fmt.Sprintf("doulist:%s:%d", doulistID, start), TTL: model.SecondsDayPlusBuffer},
 			&result)
 		if err != nil {
+			if page == 1 && isNotFound404(err) {
+				failwatch.Record(ctx, failwatch.KindDoulist, doulistID)
+			}
 			return nil, err
+		}
+		if page == 1 {
+			failwatch.Clear(ctx, failwatch.KindDoulist, doulistID)
 		}
 		all = append(all, result.DoulistItems...)
 		if maxPages > 0 && page >= maxPages {
@@ -108,6 +119,9 @@ func (d *DoubanAPI) GetDoulistItems(ctx context.Context, doulistID string, maxPa
 }
 
 func (d *DoubanAPI) GetSubjectCollectionItems(ctx context.Context, collectionID string, skip int) (*DoubanSubjectCollection, error) {
+	if failwatch.Disabled(ctx, failwatch.KindCollection, collectionID) {
+		return nil, &APIError{Status: 404, Body: "collection disabled: consecutive 404s"}
+	}
 	var result DoubanSubjectCollection
 	err := d.RequestJSON(ctx, "GET",
 		fmt.Sprintf("/subject_collection/%s/items", collectionID),
@@ -118,7 +132,13 @@ func (d *DoubanAPI) GetSubjectCollectionItems(ctx context.Context, collectionID 
 		&CacheConfig{Key: fmt.Sprintf("subject_collection:%s:%d", collectionID, skip), TTL: model.SecondsDayPlusBuffer},
 		&result)
 	if err != nil {
+		if skip == 0 && isNotFound404(err) {
+			failwatch.Record(ctx, failwatch.KindCollection, collectionID)
+		}
 		return nil, err
+	}
+	if skip == 0 {
+		failwatch.Clear(ctx, failwatch.KindCollection, collectionID)
 	}
 	// post-process items: resolve cover URL, extract year
 	for i := range result.SubjectCollectionItems {
@@ -163,6 +183,12 @@ func (d *DoubanAPI) GetSubjectCollectionItems(ctx context.Context, collectionID 
 		}
 	}
 	return &result, nil
+}
+
+// isNotFound404 判定错误是否为上游 404（用于失效观察，5xx/网络错不算）
+func isNotFound404(err error) bool {
+	var apiErr *APIError
+	return errors.As(err, &apiErr) && apiErr.Status == 404
 }
 
 func (d *DoubanAPI) GetSubjectDetailDesc(ctx context.Context, subjectID int) (map[string]string, error) {

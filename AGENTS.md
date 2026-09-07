@@ -41,10 +41,13 @@
 | 部署目录 | /root/docker/douban-api |
 | 容器 | douban-api（0.0.0.0:4000） |
 
+镜像模式：**compose 无 build 段**，镜像 `ghcr.io/syuim/douban:latest` 由 GitHub Actions 自动构建推送（push main 触发，路径排除 `*.md`，纯文档改动不触发），节点只拉镜像。`docker compose up -d --build` 不会重建（历史踩坑），勿用。
+
 步骤：
 1. `git fetch && git reset --hard origin/main`（兼容 force push，**不可用 `git pull`**）
-2. `docker compose up -d --build`
-3. 验证：`curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4000/catalog/series/tv_hot.json` → `200`；`docker logs --tail 5 douban-api` 无启动错误
+2. 等 CI 构建完成：`gh run watch --repo syuim/douban`（或 GitHub Actions 页面确认绿色）
+3. `cd /root/docker/douban-api && docker compose pull && docker compose up -d`
+4. 验证：`curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4000/catalog/series/tv_hot.json` → `200`；`docker logs --tail 5 douban-api` 无启动错误
 
 ⚠️ `/root/docker/douban` 是 **addon（syuim/stremio-addon-douban）** 的部署目录（带前端，v2.x），与本仓库无关，勿混淆。
 

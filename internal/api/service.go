@@ -193,7 +193,7 @@ func (s *Service) FindExternalID(ctx context.Context, params FindIDParams) (*Dou
 		}
 	}
 
-	// 2. If no IMDb, search Trakt by title
+	// 2. If no IMDb, search Trakt by title; TMDB search fills TmdbID when Trakt unavailable
 	if result.ImdbID == nil {
 		title := params.Title
 		if title == "" && desc != nil {
@@ -205,6 +205,11 @@ func (s *Service) FindExternalID(ctx context.Context, params FindIDParams) (*Dou
 				result.TraktID = traktIDs.TraktID
 				result.TmdbID = traktIDs.TmdbID
 				result.ImdbID = traktIDs.ImdbID
+			}
+			if result.TmdbID == nil {
+				if m := s.findIDWithTmdbSearchTitle(ctx, params.Type, title); m != nil {
+					result.TmdbID = m.TmdbID
+				}
 			}
 		}
 	}
@@ -404,4 +409,39 @@ func (s *Service) findIDWithTraktSearchTitle(ctx context.Context, mediaType, tit
 	}
 
 	return nil, nil
+}
+
+// findIDWithTmdbSearchTitle 用 TMDB 搜索兜底标题解析（Trakt 不可用时仍能解析 tmdb id）。
+// 保守匹配：仅接受唯一结果或名称精确匹配（含去季名）的唯一项，避免误映射。
+func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, title string) *IDMapping {
+	searchType := "movie"
+	if mediaType == "tv" {
+		searchType = "tv"
+	}
+	res, err := s.TmdbAPI.Search(ctx, searchType, map[string]string{
+		"query":    title,
+		"language": "zh-CN",
+	})
+	if err != nil || res == nil || len(res.Results) == 0 {
+		return nil
+	}
+	if len(res.Results) == 1 {
+		return &IDMapping{TmdbID: intPtr(res.Results[0].ID)}
+	}
+
+	titleSet := map[string]bool{title: true}
+	if cleaned := cleanSearchTitle(title); cleaned != "" && cleaned != title {
+		titleSet[cleaned] = true
+	}
+	var matches []TmdbTrendingItem
+	for i := range res.Results {
+		r := &res.Results[i]
+		if titleSet[r.Title] || titleSet[r.Name] {
+			matches = append(matches, *r)
+		}
+	}
+	if len(matches) == 1 {
+		return &IDMapping{TmdbID: intPtr(matches[0].ID)}
+	}
+	return nil
 }

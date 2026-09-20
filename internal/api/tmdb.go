@@ -60,7 +60,9 @@ func NewTmdbAPI(apiKey string) *TmdbAPI {
 
 func (t *TmdbAPI) Search(ctx context.Context, searchType string, params map[string]string) (*TmdbSearchResult, error) {
 	var result TmdbSearchResult
-	err := t.RequestJSON(ctx, "GET", "/search/"+searchType, params, nil, nil, nil, &result)
+	err := t.RequestJSON(ctx, "GET", "/search/"+searchType, params, nil, nil,
+		&CacheConfig{Key: fmt.Sprintf("tmdb:search:%s:%s:%s", searchType, params["query"], params["language"]), TTL: model.SecondsDayPlusBuffer},
+		&result)
 	return &result, err
 }
 

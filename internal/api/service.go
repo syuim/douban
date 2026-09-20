@@ -277,7 +277,18 @@ func (s *Service) findWithImdb(ctx context.Context, imdbID, mediaType string) *I
 			trakt = findTraktResultByTmdb(s, data, *m.TmdbID, &imdbID)
 		}
 		if trakt == nil {
-			trakt = mappingFromTraktResult(s, &data[0], &imdbID)
+			expectType := mediaType
+			if expectType == "tv" {
+				expectType = "show"
+			}
+			for i := range data {
+				if expectType != "" && data[i].Type != expectType {
+					continue
+				}
+				if trakt = mappingFromTraktResult(s, &data[i], &imdbID); trakt != nil {
+					break
+				}
+			}
 		}
 		if trakt != nil {
 			if m.TmdbID == nil {

@@ -186,7 +186,7 @@ func (s *Service) FindExternalID(ctx context.Context, params FindIDParams) (*Dou
 	}
 	if imdbID != "" {
 		result.ImdbID = &imdbID
-		if m := s.findWithImdb(ctx, imdbID); m != nil {
+		if m := s.findWithImdb(ctx, imdbID, params.Type); m != nil {
 			result.TraktID = m.TraktID
 			result.TmdbID = m.TmdbID
 			result.ImdbID = m.ImdbID
@@ -218,7 +218,7 @@ func (s *Service) FindByImdbID(ctx context.Context, imdbID string) *DoubanIDMapp
 	if imdbID == "" {
 		return nil
 	}
-	m := s.findWithImdb(ctx, imdbID)
+	m := s.findWithImdb(ctx, imdbID, "")
 	if m == nil {
 		return nil
 	}
@@ -244,16 +244,28 @@ func (s *Service) FindByTitle(ctx context.Context, mediaType, title, originalTit
 	}
 }
 
-func (s *Service) findWithImdb(ctx context.Context, imdbID string) *IDMapping {
+func (s *Service) findWithImdb(ctx context.Context, imdbID, mediaType string) *IDMapping {
 	m := &IDMapping{ImdbID: &imdbID}
 
 	// Direct TMDB lookup by IMDb ID is the most reliable fallback.
+	// 按条目类型取对应结果：剧集条目误用 TMDB movie id 会导致后续 tv/{id} 全量 404
 	if find, err := s.TmdbAPI.FindByID(ctx, imdbID, "imdb_id"); err == nil && find != nil {
-		if len(find.MovieResults) == 1 {
-			m.TmdbID = intPtr(find.MovieResults[0].ID)
-		}
-		if len(find.TVResults) == 1 {
-			m.TmdbID = intPtr(find.TVResults[0].ID)
+		switch mediaType {
+		case "tv":
+			if len(find.TVResults) == 1 {
+				m.TmdbID = intPtr(find.TVResults[0].ID)
+			}
+		case "movie":
+			if len(find.MovieResults) == 1 {
+				m.TmdbID = intPtr(find.MovieResults[0].ID)
+			}
+		default:
+			if len(find.MovieResults) == 1 {
+				m.TmdbID = intPtr(find.MovieResults[0].ID)
+			}
+			if len(find.TVResults) == 1 {
+				m.TmdbID = intPtr(find.TVResults[0].ID)
+			}
 		}
 	}
 

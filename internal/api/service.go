@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"stremio-addon-douban/internal/db"
 )
@@ -412,36 +413,55 @@ func (s *Service) findIDWithTraktSearchTitle(ctx context.Context, mediaType, tit
 }
 
 // findIDWithTmdbSearchTitle 用 TMDB 搜索兜底标题解析（Trakt 不可用时仍能解析 tmdb id）。
-// 保守匹配：仅接受唯一结果或名称精确匹配（含去季名）的唯一项，避免误映射。
+// 豆瓣标题常带季名/副标题后缀（「第二季」「：夏篇」「～早春养生篇～」），完整标题在 TMDB
+// 搜不到，按 原题 → 去季名 → 去副标题 的保序候选逐个尝试；
+// 每条查询仅接受唯一结果或名称精确匹配的唯一项，避免误映射。
 func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, title string) *IDMapping {
 	searchType := "movie"
 	if mediaType == "tv" {
 		searchType = "tv"
 	}
-	res, err := s.TmdbAPI.Search(ctx, searchType, map[string]string{
-		"query":    title,
-		"language": "zh-CN",
-	})
-	if err != nil || res == nil || len(res.Results) == 0 {
-		return nil
-	}
-	if len(res.Results) == 1 {
-		return &IDMapping{TmdbID: intPtr(res.Results[0].ID)}
-	}
 
-	titleSet := map[string]bool{title: true}
-	if cleaned := cleanSearchTitle(title); cleaned != "" && cleaned != title {
-		titleSet[cleaned] = true
+	var candidates []string
+	seen := map[string]bool{}
+	addCandidate := func(t string) {
+		t = strings.TrimSpace(t)
+		if t == "" || seen[t] {
+			return
+		}
+		seen[t] = true
+		candidates = append(candidates, t)
 	}
-	var matches []TmdbTrendingItem
-	for i := range res.Results {
-		r := &res.Results[i]
-		if titleSet[r.Title] || titleSet[r.Name] {
-			matches = append(matches, *r)
+	addCandidate(title)
+	cleaned := cleanSearchTitle(title)
+	addCandidate(cleaned)
+	for _, t := range []string{title, cleaned} {
+		if i := strings.IndexAny(t, "：:～~"); i > 0 && utf8.RuneCountInString(t[:i]) >= 2 {
+			addCandidate(t[:i])
 		}
 	}
-	if len(matches) == 1 {
-		return &IDMapping{TmdbID: intPtr(matches[0].ID)}
+
+	for _, q := range candidates {
+		res, err := s.TmdbAPI.Search(ctx, searchType, map[string]string{
+			"query":    q,
+			"language": "zh-CN",
+		})
+		if err != nil || res == nil || len(res.Results) == 0 {
+			continue
+		}
+		if len(res.Results) == 1 {
+			return &IDMapping{TmdbID: intPtr(res.Results[0].ID)}
+		}
+		var matches []TmdbTrendingItem
+		for i := range res.Results {
+			r := &res.Results[i]
+			if seen[r.Title] || seen[r.Name] {
+				matches = append(matches, *r)
+			}
+		}
+		if len(matches) == 1 {
+			return &IDMapping{TmdbID: intPtr(matches[0].ID)}
+		}
 	}
 	return nil
 }

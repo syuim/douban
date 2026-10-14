@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本仓库提供豆瓣榜单 Go 服务（catalog API）+ ForwardWidget 插件（`forward-widget/douban.js`）。对外经 emby-proxy `/doubanapi` 反代（rn.127315.xyz:4000）。
+本仓库提供豆瓣榜单 Go 服务（catalog API）+ ForwardWidget 插件（`forward-widget/douban.js`）。对外经 emby-proxy `/doubanapi` 反代（sjc.127315.xyz:4000）。
 
 ## 命令速查
 
@@ -34,10 +34,10 @@
 
 | 项 | 值 |
 |----|----|
-| host | rn.127315.xyz |
+| host | sjc.127315.xyz |
 | port | 22222 |
 | user | root |
-| 密钥 | ~/.ssh/syu_vps |
+| 鉴权 | 密码登录（凭据由 Netcatty vault 管理）；root 未配置 authorized_keys，不支持密钥登录 |
 | 部署目录 | /root/docker/douban-api |
 | 容器 | douban-api（0.0.0.0:4000） |
 

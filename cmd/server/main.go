@@ -22,8 +22,8 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// chi 的 r.Use 不会作用到 NotFound 路由，故在服务入口包裹中间件
 	r := chi.NewRouter()
-	r.Use(middleware.CORS)
 
 	// catalog 路由（/catalog/{type}/{catalogID}.json）— 含点路径段，手动解析
 	r.NotFound(handler.CatalogResourceHandler)
@@ -41,7 +41,7 @@ func main() {
 	}
 
 	log.Printf("🚀 Server starting on port %s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	if err := http.ListenAndServe(":"+port, middleware.RequestLog(middleware.CORS(r))); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }

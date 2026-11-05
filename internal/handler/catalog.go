@@ -195,12 +195,19 @@ func handleTmdbCatalog(w http.ResponseWriter, r *http.Request, catalog *collecti
 	if catalog.ID == collection.TmdbDiscoverAnimeID {
 		movieGenreMap, _ := tmdbAPI.GetGenres(ctx, "movie")
 		tvGenreMap, _ := tmdbAPI.GetGenres(ctx, "tv")
-		movieRes, _ := tmdbAPI.Discover(ctx, "movie", map[string]string{
-			"with_genres": "16", "sort_by": "popularity.desc", "vote_count_gte": "200",
-		}, page)
-		tvRes, _ := tmdbAPI.Discover(ctx, "tv", map[string]string{
-			"with_genres": "16", "sort_by": "popularity.desc", "vote_count_gte": "200",
-		}, page)
+
+		// 平台/排序参数同时作用于动画电影与动画剧集
+		discover := discoverParams(extra)
+		discover["with_genres"] = "16"
+		if discover["sort_by"] == "" {
+			discover["sort_by"] = "popularity.desc"
+		}
+		if discover["vote_count.gte"] == "" {
+			discover["vote_count.gte"] = "200"
+		}
+
+		movieRes, _ := tmdbAPI.Discover(ctx, "movie", discover, page)
+		tvRes, _ := tmdbAPI.Discover(ctx, "tv", discover, page)
 
 		var metas []model.MetaDetail
 		if movieRes != nil {

@@ -3,13 +3,13 @@
 WidgetMetadata = {
   id: "com.douban.discovery",
   title: "豆瓣榜单",
-  version: "1.0.8",
+  version: "1.0.9",
   requiredVersion: "0.0.1",
   description: "豆瓣热门电影、口碑榜、剧场与剧集榜单",
   author: "suyu",
   site: "https://github.com/InchStudio/ForwardWidgets",
   globalParams: [
-    { name: "server", title: "服务地址", type: "input", value: "https://proxy.laoz.org/doubanapi" },
+    { name: "server", title: "服务地址", type: "input", value: "https://douban.laoz.org" },
   ],
   modules: [
     {
@@ -287,7 +287,7 @@ WidgetMetadata = {
   ],
 };
 
-const DEFAULT_SERVER = "https://proxy.laoz.org/doubanapi";
+const DEFAULT_SERVER = "https://douban.laoz.org";
 
 // globalParams 的 server 会合并进每个 handler 的 params：去空格、校验协议、去尾斜杠
 function resolveServer(params = {}) {
@@ -311,9 +311,15 @@ async function loadList(params = {}) {
       // 平台筛选走通用 TMDB discover catalog（trending 接口不支持平台过滤）
       // extra 参数须编码在路径段（服务端 parseExtra 只解析 .json 前路径，query 仅 skip/genre）
       const isMovie = type === "movie";
-      const discoverCatalog = isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv";
-      const mediaType = catalogId === "tmdb_discover_anime" ? "anime" : "tv";
-      const query = buildDiscoverQuery(platformConfig, isMovie, { mediaType, sortBy: "hot" });
+      const isAnime = catalogId === "tmdb_discover_anime";
+      if (isMovie && !platformConfig.provider) return []; // 纯电视网无电影数据
+      const useProvider = isMovie || (isAnime && Boolean(platformConfig.provider));
+      // 动漫走 anime catalog 才能同时覆盖动画电影与剧集（需平台有 provider 过滤）
+      const discoverCatalog = isAnime
+        ? (useProvider ? "tmdb_discover_anime" : "tmdb_discover_tv")
+        : (isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv");
+      const mediaType = isAnime ? "anime" : (isMovie ? "movie" : "tv");
+      const query = buildDiscoverQuery(platformConfig, isMovie, { mediaType, sortBy: "hot", useProvider });
       url = `${server}/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
     } else {
       url = `${server}/catalog/${type}/${catalogId}.json?skip=${skip}`;
@@ -430,10 +436,11 @@ function getGenreText(ids) {
 }
 
 // 平台/影视分类/排序 → TMDB discover 查询参数（服务端 tmdb_discover catalog 白名单透传）
+// useProvider：电影/动漫合并查询走订阅商过滤（with_watch_providers），纯剧集走电视网（with_networks）
 function buildDiscoverQuery(platformConfig, isMovie, opts = {}) {
   const q = [];
   if (platformConfig) {
-    if (isMovie) {
+    if (opts.useProvider) {
       if (platformConfig.provider) {
         q.push("with_watch_providers=" + encodeURIComponent(platformConfig.provider));
         q.push("watch_region=" + encodeURIComponent(platformConfig.region || "US"));
@@ -473,15 +480,21 @@ async function loadPlatformList(params = {}) {
     const skip = (page - 1) * 20;
 
     const isMovie = mediaType === "movie";
+    const isAnime = mediaType === "anime";
     const type = isMovie ? "movie" : "series";
     const platformConfig = PLATFORM_MAP[platform];
     if (isMovie && !platformConfig.provider) return []; // 纯电视网无电影数据
 
+    const useProvider = isMovie || (isAnime && Boolean(platformConfig.provider));
+    // 动漫走 anime catalog 才能同时覆盖动画电影与剧集（需平台有 provider 过滤）
+    const discoverCatalog = isAnime
+      ? (useProvider ? "tmdb_discover_anime" : "tmdb_discover_tv")
+      : (isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv");
     const query = buildDiscoverQuery(platformConfig, isMovie, {
-      mediaType, sortBy: category, today: new Date().toISOString().split("T")[0],
+      mediaType, sortBy: category, today: new Date().toISOString().split("T")[0], useProvider,
     });
     // extra 参数须编码在路径段（服务端 parseExtra 只解析 .json 前路径，query 仅 skip/genre）
-    const url = `${server}/catalog/${type}/${isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv"}/${query.join("&")}.json?skip=${skip}`;
+    const url = `${server}/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
     const res = await Widget.http.get(url, { headers: { "User-Agent": "forward widget/1.0" } });
     const metas = (res.data && res.data.metas) || [];
     return metas.map(toVideoItem).filter((it) => it.posterPath);

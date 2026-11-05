@@ -225,14 +225,20 @@ func (s *Service) findTmdbByImdb(ctx context.Context, imdbID, mediaType string) 
 func intPtr(n int) *int { return &n }
 
 var seasonRe = regexp.MustCompile(`\s*（?第?[0-9一二三四五六七八九十百零]+季）?\s*`)
+var partRe = regexp.MustCompile(`\s*（?第[0-9一二三四五六七八九十百零]+部）?\s*$`)
 
 func cleanSearchTitle(title string) string {
 	return strings.TrimSpace(seasonRe.ReplaceAllString(title, ""))
 }
 
+// cleanPartTitle 去掉结尾的「第X部」：豆瓣常把续作拆成独立条目，TMDB 合并在同一剧集下。
+func cleanPartTitle(title string) string {
+	return strings.TrimSpace(partRe.ReplaceAllString(title, ""))
+}
+
 // findIDWithTmdbSearchTitle 用 TMDB 标题搜索解析 tmdb id。
-// 豆瓣标题常带季名/副标题后缀（「第二季」「：夏篇」「～早春养生篇～」），完整标题在 TMDB
-// 搜不到，按 原题 → 去季名 → 去副标题 的保序候选逐个尝试；
+// 豆瓣标题常带季名/部数/副标题后缀（「第二季」「第二部」「：夏篇」「～早春养生篇～」），
+// 完整标题在 TMDB 搜不到，按 原题 → 去季名 → 去部数 → 去副标题 的保序候选逐个尝试；
 // 每条查询仅接受唯一结果或名称精确匹配的唯一项，避免误映射。
 func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, title string) *int {
 	searchType := "movie"
@@ -253,7 +259,9 @@ func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, titl
 	addCandidate(title)
 	cleaned := cleanSearchTitle(title)
 	addCandidate(cleaned)
-	for _, t := range []string{title, cleaned} {
+	part := cleanPartTitle(cleaned)
+	addCandidate(part)
+	for _, t := range []string{title, cleaned, part} {
 		if i := strings.IndexAny(t, "：:～~"); i > 0 && utf8.RuneCountInString(t[:i]) >= 2 {
 			addCandidate(t[:i])
 		}

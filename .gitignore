@@ -28,4 +28,5 @@ lerna-debug.log*
 .DS_Store
 data/
 
+.qoder/
 .codegraph/

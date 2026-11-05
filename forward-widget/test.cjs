@@ -26,6 +26,9 @@ global.Widget = {
       if (url.includes("/catalog/series/tmdb_trending_tv.json")) {
         return { data: { metas: tmdbTvFixtures } };
       }
+      if (url.includes("/catalog/series/tmdb_discover_anime/")) {
+        return { data: { metas: animeFixtures } };
+      }
       if (url.includes("/catalog/series/tmdb_discover_anime.json")) {
         return { data: { metas: animeFixtures } };
       }
@@ -95,7 +98,7 @@ const tmdbDiscoverMovieFixtures = [
 (async () => {
   // 1. 分页换算与请求构造
   const list = await loadList({ page: 2, catalog: "movie:movie_hot_gaia" });
-  assert.equal(calls[0].url, "https://proxy.laoz.org/doubanapi/catalog/movie/movie_hot_gaia.json?skip=20");
+  assert.equal(calls[0].url, "https://douban.laoz.org/catalog/movie/movie_hot_gaia.json?skip=20");
   assert.equal(calls[0].headers["User-Agent"], "forward widget/1.0");
 
   // 2. tmdb id 输出字符串数字（与 MakkaPakka 一致，数字类型会被 App 拒收）+ mediaType
@@ -195,13 +198,21 @@ const tmdbDiscoverMovieFixtures = [
   assert.ok(movieCall.url.includes("watch_region=CN"));
   assert.ok(movieCall.url.includes("sort_by=vote_average.desc"));
   assert.ok(movieCall.url.includes("vote_count.gte=30"));
+  assert.ok(!movieCall.url.includes("without_genres"), "电影平台筛选不应带 without_genres");
   assert.equal(platformMovie[0].mediaType, "movie");
+  // 动漫 + 有 provider 的平台：走 anime catalog 合并动画电影/剧集
   await loadPlatformList({ sort_by: "hbo", mediaType: "anime", sortBy: "new" });
   let animeCall = calls[calls.length - 1];
-  assert.ok(animeCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=49%7C3186"));
+  assert.ok(animeCall.url.includes("/catalog/series/tmdb_discover_anime/with_watch_providers=118"));
+  assert.ok(animeCall.url.includes("watch_region=US"));
   assert.ok(animeCall.url.includes("with_genres=16"));
   assert.ok(animeCall.url.includes("sort_by=first_air_date.desc"));
   assert.ok(animeCall.url.includes("first_air_date.lte="));
+  // 动漫 + 无 provider 的平台：退回纯剧集网络过滤
+  await loadPlatformList({ sort_by: "viutv", mediaType: "anime" });
+  let animeTvCall = calls[calls.length - 1];
+  assert.ok(animeTvCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=2146"));
+  assert.ok(animeTvCall.url.includes("with_genres=16"));
 
   // 15. 影视平台：纯电视网（ViuTV）无电影 provider → 空数组，不请求
   const viutvMovie = await loadPlatformList({ sort_by: "viutv", mediaType: "movie" });
@@ -212,16 +223,23 @@ const tmdbDiscoverMovieFixtures = [
   const pfCall = calls[calls.length - 1];
   assert.ok(pfCall.url.includes("/catalog/movie/tmdb_discover_movie/with_watch_providers=8"));
   assert.ok(pfCall.url.includes("watch_region=US"));
+  assert.ok(!pfCall.url.includes("without_genres"), "电影平台筛选不应带 without_genres");
   assert.equal(pf[0].id, "234567");
   assert.equal(pf[0].mediaType, "movie");
   // 平台=全部/缺省时保持原 trending 请求
   await loadList({ catalog: "movie:tmdb_trending_movie", platform: "all" });
   assert.ok(calls[calls.length - 1].url.includes("/catalog/movie/tmdb_trending_movie.json?skip=0"));
-  // 动漫 catalog 走平台筛选时保留 with_genres=16
+  // 动漫 catalog 走平台筛选时改走 anime catalog（合并动画电影/剧集）并保留 with_genres=16
   await loadList({ catalog: "series:tmdb_discover_anime", platform: "hbo" });
   const animePfCall = calls[calls.length - 1];
-  assert.ok(animePfCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=49%7C3186"));
+  assert.ok(animePfCall.url.includes("/catalog/series/tmdb_discover_anime/with_watch_providers=118"));
+  assert.ok(animePfCall.url.includes("watch_region=US"));
   assert.ok(animePfCall.url.includes("with_genres=16"));
+  // 动漫 + 无 provider 平台：退回 tmdb_discover_tv + with_networks
+  await loadList({ catalog: "series:tmdb_discover_anime", platform: "viutv" });
+  const animePfTvCall = calls[calls.length - 1];
+  assert.ok(animePfTvCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=2146"));
+  assert.ok(animePfTvCall.url.includes("with_genres=16"));
 
   // 17. server 去空格与协议校验
   await loadList({ server: "  http://example.com:9999/  ", catalog: "movie:movie_hot_gaia" });

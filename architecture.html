@@ -196,7 +196,7 @@
           <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export options" aria-label="Export options">⋯</button>
         </div>
       </div>
-      <p class="subtitle">ForwardWidget 插件 → CF /doubanapi 反代 → Go catalog 服务 → 外部数据源（豆瓣 / TMDB / Trakt / Fanart）</p>
+      <p class="subtitle">ForwardWidget 插件 → CF /doubanapi 反代 → Go catalog 服务 → 外部数据源（豆瓣 / TMDB / Fanart）</p>
     </div>
 
     <!-- Main Diagram -->
@@ -338,10 +338,10 @@
         <!-- Row C -->
         <rect x="45" y="735" width="580" height="55" rx="6" fill="rgba(6, 78, 59, 0.4)" stroke="#34d399" stroke-width="1.5"/>
         <text x="335" y="758" fill="white" font-size="11" font-weight="600" text-anchor="middle">API 层 · BaseAPI（全部经 /url 统一代理转发）</text>
-        <text x="335" y="774" fill="#94a3b8" font-size="9" text-anchor="middle">DoubanAPI · TraktAPI · TmdbAPI · FanartAPI · singleflight 去重 · 指数退避重试</text>
+        <text x="335" y="774" fill="#94a3b8" font-size="9" text-anchor="middle">DoubanAPI · TmdbAPI · FanartAPI · singleflight 去重 · 指数退避重试</text>
 
         <!-- ============ EXTERNAL APIS ============ -->
-        <rect x="650" y="430" width="320" height="490" rx="12" fill="rgba(30, 41, 59, 0.1)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8,4"/>
+        <rect x="650" y="430" width="320" height="380" rx="12" fill="rgba(30, 41, 59, 0.1)" stroke="#94a3b8" stroke-width="1" stroke-dasharray="8,4"/>
         <text x="662" y="448" fill="#94a3b8" font-size="10" font-weight="600">外部数据源（经 /url 出网）</text>
 
         <rect x="670" y="460" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
@@ -357,14 +357,9 @@
         <text x="815" y="648" fill="#94a3b8" font-size="9" text-anchor="middle">image.tmdb.org 海报</text>
 
         <rect x="670" y="690" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="815" y="715" fill="white" font-size="11" font-weight="600" text-anchor="middle">Trakt API</text>
-        <text x="815" y="731" fill="#94a3b8" font-size="9" text-anchor="middle">api.trakt.tv</text>
-        <text x="815" y="747" fill="#94a3b8" font-size="9" text-anchor="middle">标题搜索 · IMDb 反查</text>
-
-        <rect x="670" y="805" width="290" height="85" rx="6" fill="rgba(30, 41, 59, 0.5)" stroke="#94a3b8" stroke-width="1.5"/>
-        <text x="815" y="830" fill="white" font-size="11" font-weight="600" text-anchor="middle">Fanart API</text>
-        <text x="815" y="846" fill="#94a3b8" font-size="9" text-anchor="middle">webservice.fanart.tv</text>
-        <text x="815" y="862" fill="#94a3b8" font-size="9" text-anchor="middle">海报 / 背景 / Logo</text>
+        <text x="815" y="715" fill="white" font-size="11" font-weight="600" text-anchor="middle">Fanart API</text>
+        <text x="815" y="731" fill="#94a3b8" font-size="9" text-anchor="middle">webservice.fanart.tv</text>
+        <text x="815" y="747" fill="#94a3b8" font-size="9" text-anchor="middle">海报 / 背景 / Logo</text>
 
         <!-- ============ LEGEND（界外） ============ -->
         <rect x="30" y="940" width="16" height="10" rx="2" fill="rgba(8, 51, 68, 0.4)" stroke="#22d3ee" stroke-width="1"/>

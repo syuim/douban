@@ -3,7 +3,7 @@
 WidgetMetadata = {
   id: "com.douban.discovery",
   title: "豆瓣榜单",
-  version: "1.0.7",
+  version: "1.0.8",
   requiredVersion: "0.0.1",
   description: "豆瓣热门电影、口碑榜、剧场与剧集榜单",
   author: "suyu",
@@ -287,9 +287,20 @@ WidgetMetadata = {
   ],
 };
 
+const DEFAULT_SERVER = "https://proxy.laoz.org/doubanapi";
+
+// globalParams 的 server 会合并进每个 handler 的 params：去空格、校验协议、去尾斜杠
+function resolveServer(params = {}) {
+  const server = String(params.server || "").trim() || DEFAULT_SERVER;
+  if (!/^https?:\/\//i.test(server)) {
+    throw new Error("服务地址必须以 http:// 或 https:// 开头: " + server);
+  }
+  return server.replace(/\/+$/, "");
+}
+
 async function loadList(params = {}) {
   try {
-    const server = (params.server || "https://proxy.laoz.org/doubanapi").replace(/\/+$/, "");
+    const server = resolveServer(params);
     const [type, catalogId] = String(params.catalog || "movie:movie_hot_gaia").split(":");
     const page = Math.max(1, Number(params.page || 1));
     const skip = (page - 1) * 20;
@@ -454,7 +465,7 @@ function buildDiscoverQuery(platformConfig, isMovie, opts = {}) {
 
 async function loadPlatformList(params = {}) {
   try {
-    const server = (params.server || "https://proxy.laoz.org/doubanapi").replace(/\/+$/, "");
+    const server = resolveServer(params);
     const platform = params.sort_by || "netflix";
     const mediaType = params.mediaType || "tv";
     const category = params.sortBy || "hot";

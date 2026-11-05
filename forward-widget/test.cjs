@@ -223,5 +223,13 @@ const tmdbDiscoverMovieFixtures = [
   assert.ok(animePfCall.url.includes("/catalog/series/tmdb_discover_tv/with_networks=49%7C3186"));
   assert.ok(animePfCall.url.includes("with_genres=16"));
 
+  // 17. server 去空格与协议校验
+  await loadList({ server: "  http://example.com:9999/  ", catalog: "movie:movie_hot_gaia" });
+  assert.equal(calls[calls.length - 1].url, "http://example.com:9999/catalog/movie/movie_hot_gaia.json?skip=0");
+  await assert.rejects(
+    () => loadList({ server: "example.com:9999", catalog: "movie:movie_hot_gaia" }),
+    /http:\/\/ 或 https:\/\//
+  );
+
   console.log("✅ ok", { calls: calls.length });
 })().catch((e) => { console.error("❌", e); process.exit(1); });

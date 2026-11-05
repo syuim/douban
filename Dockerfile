@@ -11,7 +11,6 @@ FROM alpine:3.21
 WORKDIR /app
 RUN apk add --no-cache ca-certificates
 COPY --from=builder /server .
-COPY --from=builder /app/package.json .
 EXPOSE 4000
 VOLUME ["/app/data"]
 CMD ["./server"]

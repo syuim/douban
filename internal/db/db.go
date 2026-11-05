@@ -53,7 +53,6 @@ func createTables(db *sql.DB) error {
 			douban_id integer PRIMARY KEY NOT NULL,
 			tmdb_id integer,
 			imdb_id text,
-			trakt_id integer,
 			calibrated integer DEFAULT false,
 			created_at integer,
 			updated_at integer

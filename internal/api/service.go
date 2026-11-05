@@ -16,13 +16,11 @@ type DoubanIDMapping struct {
 	DoubanID   int
 	TmdbID     *int
 	ImdbID     *string
-	TraktID    *int
 	Calibrated bool
 }
 
 type Service struct {
 	DoubanAPI *DoubanAPI
-	TraktAPI  *TraktAPI
 	TmdbAPI   *TmdbAPI
 }
 
@@ -32,7 +30,6 @@ func GetService() *Service {
 	if serviceInstance == nil {
 		serviceInstance = &Service{
 			DoubanAPI: NewDoubanAPI(),
-			TraktAPI:  NewTraktAPI(),
 			TmdbAPI:   GetTmdbAPI(),
 		}
 	}
@@ -59,7 +56,7 @@ func (s *Service) FetchIDMapping(ctx context.Context, doubanIDs []int) (map[int]
 		placeholders[i] = "?"
 		args[i] = id
 	}
-	query := fmt.Sprintf("SELECT douban_id, tmdb_id, imdb_id, trakt_id FROM douban_mapping WHERE douban_id IN (%s)",
+	query := fmt.Sprintf("SELECT douban_id, tmdb_id, imdb_id FROM douban_mapping WHERE douban_id IN (%s)",
 		strings.Join(placeholders, ","))
 
 	rows, err := database.QueryContext(ctx, query, args...)
@@ -70,9 +67,9 @@ func (s *Service) FetchIDMapping(ctx context.Context, doubanIDs []int) (map[int]
 
 	for rows.Next() {
 		var m DoubanIDMapping
-		var tmdbID, traktID sql.NullInt64
+		var tmdbID sql.NullInt64
 		var imdbID sql.NullString
-		if err := rows.Scan(&m.DoubanID, &tmdbID, &imdbID, &traktID); err != nil {
+		if err := rows.Scan(&m.DoubanID, &tmdbID, &imdbID); err != nil {
 			continue
 		}
 		if tmdbID.Valid {
@@ -82,11 +79,7 @@ func (s *Service) FetchIDMapping(ctx context.Context, doubanIDs []int) (map[int]
 		if imdbID.Valid {
 			m.ImdbID = &imdbID.String
 		}
-		if traktID.Valid {
-			v := int(traktID.Int64)
-			m.TraktID = &v
-		}
-		if m.ImdbID != nil || m.TmdbID != nil || m.TraktID != nil {
+		if m.ImdbID != nil || m.TmdbID != nil {
 			mappingCache[m.DoubanID] = &m
 			mappedIDs[m.DoubanID] = true
 		}
@@ -109,11 +102,11 @@ func (s *Service) FetchMappingOne(ctx context.Context, doubanID int) (*DoubanIDM
 	}
 
 	var m DoubanIDMapping
-	var tmdbID, traktID sql.NullInt64
+	var tmdbID sql.NullInt64
 	var imdbID sql.NullString
 	err = database.QueryRowContext(ctx,
-		"SELECT douban_id, tmdb_id, imdb_id, trakt_id FROM douban_mapping WHERE douban_id = ?", doubanID).
-		Scan(&m.DoubanID, &tmdbID, &imdbID, &traktID)
+		"SELECT douban_id, tmdb_id, imdb_id FROM douban_mapping WHERE douban_id = ?", doubanID).
+		Scan(&m.DoubanID, &tmdbID, &imdbID)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +116,6 @@ func (s *Service) FetchMappingOne(ctx context.Context, doubanID int) (*DoubanIDM
 	}
 	if imdbID.Valid {
 		m.ImdbID = &imdbID.String
-	}
-	if traktID.Valid {
-		v := int(traktID.Int64)
-		m.TraktID = &v
 	}
 	return &m, nil
 }
@@ -138,7 +127,7 @@ func (s *Service) PersistIDMapping(ctx context.Context, mappings []DoubanIDMappi
 	}
 
 	for _, m := range mappings {
-		if skipNil && m.ImdbID == nil && m.TmdbID == nil && m.TraktID == nil {
+		if skipNil && m.ImdbID == nil && m.TmdbID == nil {
 			continue
 		}
 
@@ -146,20 +135,19 @@ func (s *Service) PersistIDMapping(ctx context.Context, mappings []DoubanIDMappi
 		var execErr error
 		if mode == "ignore" {
 			_, execErr = database.ExecContext(ctx, `
-				INSERT OR IGNORE INTO douban_mapping (douban_id, tmdb_id, imdb_id, trakt_id, calibrated, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?)`,
-				m.DoubanID, m.TmdbID, m.ImdbID, m.TraktID, m.Calibrated, now, now)
+				INSERT OR IGNORE INTO douban_mapping (douban_id, tmdb_id, imdb_id, calibrated, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?)`,
+				m.DoubanID, m.TmdbID, m.ImdbID, m.Calibrated, now, now)
 		} else {
 			_, execErr = database.ExecContext(ctx, `
-				INSERT INTO douban_mapping (douban_id, tmdb_id, imdb_id, trakt_id, calibrated, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
+				INSERT INTO douban_mapping (douban_id, tmdb_id, imdb_id, calibrated, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?)
 				ON CONFLICT(douban_id) DO UPDATE SET
 					tmdb_id = COALESCE(excluded.tmdb_id, douban_mapping.tmdb_id),
 					imdb_id = COALESCE(excluded.imdb_id, douban_mapping.imdb_id),
-					trakt_id = COALESCE(excluded.trakt_id, douban_mapping.trakt_id),
 					updated_at = excluded.updated_at
 				WHERE douban_mapping.calibrated IS NOT true`,
-				m.DoubanID, m.TmdbID, m.ImdbID, m.TraktID, m.Calibrated, now, now)
+				m.DoubanID, m.TmdbID, m.ImdbID, m.Calibrated, now, now)
 		}
 		if execErr != nil {
 			return fmt.Errorf("persist mapping %d: %w", m.DoubanID, execErr)
@@ -179,7 +167,7 @@ func (s *Service) FindExternalID(ctx context.Context, params FindIDParams) (*Dou
 		DoubanID: params.DoubanID,
 	}
 
-	// 1. Try Douban detail desc for IMDb ID, then TMDB /find as the primary direct lookup.
+	// 1. 豆瓣详情页 IMDb → TMDB /find 精确解析
 	desc, _ := s.DoubanAPI.GetSubjectDetailDesc(ctx, params.DoubanID)
 	var imdbID string
 	if desc != nil {
@@ -187,154 +175,51 @@ func (s *Service) FindExternalID(ctx context.Context, params FindIDParams) (*Dou
 	}
 	if imdbID != "" {
 		result.ImdbID = &imdbID
-		if m := s.findWithImdb(ctx, imdbID, params.Type); m != nil {
-			result.TraktID = m.TraktID
-			result.TmdbID = m.TmdbID
-			result.ImdbID = m.ImdbID
-		}
+		result.TmdbID = s.findTmdbByImdb(ctx, imdbID, params.Type)
 	}
 
-	// 2. If no IMDb, search Trakt by title; TMDB search fills TmdbID when Trakt unavailable
-	if result.ImdbID == nil {
+	// 2. 无 tmdb 时用 TMDB 标题搜索兜底
+	if result.TmdbID == nil {
 		title := params.Title
 		if title == "" && desc != nil {
 			title = desc["title"]
 		}
 		if title != "" {
-			traktIDs, err := s.findIDWithTraktSearchTitle(ctx, params.Type, title, "", "")
-			if err == nil && traktIDs != nil {
-				result.TraktID = traktIDs.TraktID
-				result.TmdbID = traktIDs.TmdbID
-				result.ImdbID = traktIDs.ImdbID
-			}
-			if result.TmdbID == nil {
-				if m := s.findIDWithTmdbSearchTitle(ctx, params.Type, title); m != nil {
-					result.TmdbID = m.TmdbID
-				}
-			}
+			result.TmdbID = s.findIDWithTmdbSearchTitle(ctx, params.Type, title)
 		}
 	}
 
 	return result, nil
 }
 
-// FindByImdbID resolves a known IMDb ID through TMDB first and Trakt as a
-// secondary source, preferring to keep Trakt ID when both are available.
-func (s *Service) FindByImdbID(ctx context.Context, imdbID string) *DoubanIDMapping {
-	if imdbID == "" {
+// findTmdbByImdb 用 TMDB /find 按 IMDb ID 精确解析 tmdb id。
+// 按条目类型取对应结果：剧集条目误用 TMDB movie id 会导致后续 tv/{id} 全量 404。
+func (s *Service) findTmdbByImdb(ctx context.Context, imdbID, mediaType string) *int {
+	find, err := s.TmdbAPI.FindByID(ctx, imdbID, "imdb_id")
+	if err != nil || find == nil {
 		return nil
 	}
-	m := s.findWithImdb(ctx, imdbID, "")
-	if m == nil {
-		return nil
-	}
-	return &DoubanIDMapping{
-		TmdbID:  m.TmdbID,
-		ImdbID:  m.ImdbID,
-		TraktID: m.TraktID,
-	}
-}
 
-// FindByTitle resolves an ID by Trakt title search with conservative
-// disambiguation: unique match, unique cleaned name, unique original title,
-// or unique year match for movies.
-func (s *Service) FindByTitle(ctx context.Context, mediaType, title, originalTitle, year string) *DoubanIDMapping {
-	m, err := s.findIDWithTraktSearchTitle(ctx, mediaType, title, originalTitle, year)
-	if err != nil || m == nil {
-		return nil
-	}
-	return &DoubanIDMapping{
-		TmdbID:  m.TmdbID,
-		ImdbID:  m.ImdbID,
-		TraktID: m.TraktID,
-	}
-}
-
-func (s *Service) findWithImdb(ctx context.Context, imdbID, mediaType string) *IDMapping {
-	m := &IDMapping{ImdbID: &imdbID}
-
-	// Direct TMDB lookup by IMDb ID is the most reliable fallback.
-	// 按条目类型取对应结果：剧集条目误用 TMDB movie id 会导致后续 tv/{id} 全量 404
-	if find, err := s.TmdbAPI.FindByID(ctx, imdbID, "imdb_id"); err == nil && find != nil {
-		switch mediaType {
-		case "tv":
-			if len(find.TVResults) == 1 {
-				m.TmdbID = intPtr(find.TVResults[0].ID)
-			}
-		case "movie":
-			if len(find.MovieResults) == 1 {
-				m.TmdbID = intPtr(find.MovieResults[0].ID)
-			}
-		default:
-			if len(find.MovieResults) == 1 {
-				m.TmdbID = intPtr(find.MovieResults[0].ID)
-			}
-			if len(find.TVResults) == 1 {
-				m.TmdbID = intPtr(find.TVResults[0].ID)
-			}
+	switch mediaType {
+	case "tv":
+		if len(find.TVResults) == 1 {
+			return intPtr(find.TVResults[0].ID)
 		}
-	}
-
-	// Trakt lookup can provide Trakt ID even when TMDB does not.
-	data, err := s.TraktAPI.SearchByImdbID(ctx, imdbID)
-	if err == nil && len(data) > 0 {
-		var trakt *IDMapping
-		if m.TmdbID != nil {
-			trakt = findTraktResultByTmdb(s, data, *m.TmdbID, &imdbID)
+	case "movie":
+		if len(find.MovieResults) == 1 {
+			return intPtr(find.MovieResults[0].ID)
 		}
-		if trakt == nil {
-			expectType := mediaType
-			if expectType == "tv" {
-				expectType = "show"
-			}
-			for i := range data {
-				if expectType != "" && data[i].Type != expectType {
-					continue
-				}
-				if trakt = mappingFromTraktResult(s, &data[i], &imdbID); trakt != nil {
-					break
-				}
-			}
+	default:
+		var tmdbID *int
+		if len(find.MovieResults) == 1 {
+			tmdbID = intPtr(find.MovieResults[0].ID)
 		}
-		if trakt != nil {
-			if m.TmdbID == nil {
-				m.TmdbID = trakt.TmdbID
-			}
-			m.TraktID = trakt.TraktID
-			m.ImdbID = trakt.ImdbID
+		if len(find.TVResults) == 1 {
+			tmdbID = intPtr(find.TVResults[0].ID)
 		}
-	}
-
-	if m.TmdbID == nil && m.TraktID == nil {
-		return nil
-	}
-	return m
-}
-
-func findTraktResultByTmdb(s *Service, results []TraktSearchResult, tmdbID int, fallbackImdb *string) *IDMapping {
-	for i := range results {
-		ids, ok := s.TraktAPI.GetSearchResultField(&results[i], "ids").(TraktIDs)
-		if !ok || ids.Tmdb == nil || *ids.Tmdb != tmdbID {
-			continue
-		}
-		return mappingFromTraktResult(s, &results[i], fallbackImdb)
+		return tmdbID
 	}
 	return nil
-}
-
-func mappingFromTraktResult(s *Service, result *TraktSearchResult, fallbackImdb *string) *IDMapping {
-	ids, ok := s.TraktAPI.GetSearchResultField(result, "ids").(TraktIDs)
-	if !ok {
-		return nil
-	}
-	m := s.TraktAPI.FormatIDsToIDMapping(&ids)
-	if m == nil {
-		return nil
-	}
-	if m.ImdbID == nil && fallbackImdb != nil {
-		m.ImdbID = fallbackImdb
-	}
-	return m
 }
 
 func intPtr(n int) *int { return &n }
@@ -345,78 +230,11 @@ func cleanSearchTitle(title string) string {
 	return strings.TrimSpace(seasonRe.ReplaceAllString(title, ""))
 }
 
-func (s *Service) findIDWithTraktSearchTitle(ctx context.Context, mediaType, title, originalTitle, year string) (*IDMapping, error) {
-	traktType := "movie"
-	if mediaType == "tv" {
-		traktType = "show"
-	}
-
-	data, err := s.TraktAPI.Search(ctx, traktType, title)
-	if err != nil {
-		return nil, err
-	}
-	if len(data) == 0 {
-		return nil, nil
-	}
-	if len(data) == 1 {
-		return mappingFromTraktResult(s, &data[0], nil), nil
-	}
-
-	// match by title or cleaned title
-	titleSet := map[string]bool{title: true}
-	cleaned := cleanSearchTitle(title)
-	if cleaned != "" && cleaned != title {
-		titleSet[cleaned] = true
-	}
-
-	var nameMatches []TraktSearchResult
-	for _, r := range data {
-		traktTitle, _ := s.TraktAPI.GetSearchResultField(&r, "title").(string)
-		traktOrigTitle, _ := s.TraktAPI.GetSearchResultField(&r, "original_title").(string)
-		if titleSet[traktTitle] || titleSet[traktOrigTitle] {
-			nameMatches = append(nameMatches, r)
-		}
-	}
-	if len(nameMatches) == 1 {
-		return mappingFromTraktResult(s, &nameMatches[0], nil), nil
-	}
-
-	// fallback: unique original title match
-	if originalTitle != "" {
-		var origMatches []TraktSearchResult
-		for i := range data {
-			ot, _ := s.TraktAPI.GetSearchResultField(&data[i], "original_title").(string)
-			if ot == originalTitle {
-				origMatches = append(origMatches, data[i])
-			}
-		}
-		if len(origMatches) == 1 {
-			return mappingFromTraktResult(s, &origMatches[0], nil), nil
-		}
-	}
-
-	// fallback: unique year match for movies
-	if mediaType == "movie" && year != "" {
-		var yearMatches []TraktSearchResult
-		for i := range data {
-			y, _ := s.TraktAPI.GetSearchResultField(&data[i], "year").(int)
-			if fmt.Sprintf("%d", y) == year {
-				yearMatches = append(yearMatches, data[i])
-			}
-		}
-		if len(yearMatches) == 1 {
-			return mappingFromTraktResult(s, &yearMatches[0], nil), nil
-		}
-	}
-
-	return nil, nil
-}
-
-// findIDWithTmdbSearchTitle 用 TMDB 搜索兜底标题解析（Trakt 不可用时仍能解析 tmdb id）。
+// findIDWithTmdbSearchTitle 用 TMDB 标题搜索解析 tmdb id。
 // 豆瓣标题常带季名/副标题后缀（「第二季」「：夏篇」「～早春养生篇～」），完整标题在 TMDB
 // 搜不到，按 原题 → 去季名 → 去副标题 的保序候选逐个尝试；
 // 每条查询仅接受唯一结果或名称精确匹配的唯一项，避免误映射。
-func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, title string) *IDMapping {
+func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, title string) *int {
 	searchType := "movie"
 	if mediaType == "tv" {
 		searchType = "tv"
@@ -450,7 +268,7 @@ func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, titl
 			continue
 		}
 		if len(res.Results) == 1 {
-			return &IDMapping{TmdbID: intPtr(res.Results[0].ID)}
+			return intPtr(res.Results[0].ID)
 		}
 		var matches []TmdbTrendingItem
 		for i := range res.Results {
@@ -460,7 +278,7 @@ func (s *Service) findIDWithTmdbSearchTitle(ctx context.Context, mediaType, titl
 			}
 		}
 		if len(matches) == 1 {
-			return &IDMapping{TmdbID: intPtr(matches[0].ID)}
+			return intPtr(matches[0].ID)
 		}
 	}
 	return nil

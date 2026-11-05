@@ -28,7 +28,7 @@
 
 ## 环境变量（`.env`，gitignore）
 
-`DOUBAN_API_KEY`、`TMDB_API_KEY`、`TRAKT_CLIENT_ID`、`FANART_API_KEY`、`PORT`（4000）、`PROXY_URL`（默认 `https://proxy.laoz.org/url`，所有外部请求经它转发）
+`DOUBAN_API_KEY`、`TMDB_API_KEY`、`FANART_API_KEY`、`PORT`（4000）、`PROXY_URL`（默认 `https://proxy.laoz.org/url`，所有外部请求经它转发）
 
 ## 部署（Go 节点）
 

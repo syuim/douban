@@ -3,13 +3,13 @@
 WidgetMetadata = {
   id: "com.douban.discovery",
   title: "豆瓣榜单",
-  version: "1.0.9",
+  version: "1.0.10",
   requiredVersion: "0.0.1",
   description: "豆瓣热门电影、口碑榜、剧场与剧集榜单",
   author: "suyu",
   site: "https://github.com/InchStudio/ForwardWidgets",
   globalParams: [
-    { name: "server", title: "服务地址", type: "input", value: "https://douban.laoz.org" },
+    { name: "server", title: "服务地址", type: "input", value: "https://proxy.laoz.org/doubanapi" },
   ],
   modules: [
     {
@@ -287,7 +287,7 @@ WidgetMetadata = {
   ],
 };
 
-const DEFAULT_SERVER = "https://douban.laoz.org";
+const DEFAULT_SERVER = "https://proxy.laoz.org/doubanapi";
 
 // globalParams 的 server 会合并进每个 handler 的 params：去空格、校验协议、去尾斜杠
 function resolveServer(params = {}) {

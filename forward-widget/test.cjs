@@ -98,7 +98,7 @@ const tmdbDiscoverMovieFixtures = [
 (async () => {
   // 1. 分页换算与请求构造
   const list = await loadList({ page: 2, catalog: "movie:movie_hot_gaia" });
-  assert.equal(calls[0].url, "https://douban.laoz.org/catalog/movie/movie_hot_gaia.json?skip=20");
+  assert.equal(calls[0].url, "https://proxy.laoz.org/doubanapi/catalog/movie/movie_hot_gaia.json?skip=20");
   assert.equal(calls[0].headers["User-Agent"], "forward widget/1.0");
 
   // 2. tmdb id 输出字符串数字（与 MakkaPakka 一致，数字类型会被 App 拒收）+ mediaType

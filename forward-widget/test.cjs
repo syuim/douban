@@ -8,6 +8,12 @@ global.Widget = {
   http: {
     get: async (url, options) => {
       calls.push({ url, headers: options && options.headers });
+      if (url.startsWith("http://empty.example.com")) {
+        return { data: { metas: [] } };
+      }
+      if (url.startsWith("http://fail.example.com")) {
+        throw new Error("network down");
+      }
       if (url.includes("/catalog/movie/movie_hot_gaia.json")) {
         return { data: { metas: movieFixtures } };
       }
@@ -248,6 +254,17 @@ const tmdbDiscoverMovieFixtures = [
     () => loadList({ server: "example.com:9999", catalog: "movie:movie_hot_gaia" }),
     /http:\/\/ 或 https:\/\//
   );
+
+  // 18. 自定义入口无数据 / 请求失败时回退默认地址
+  const emptyFallback = await loadList({ server: "http://empty.example.com", catalog: "movie:movie_hot_gaia" });
+  assert.equal(emptyFallback.length, 3);
+  assert.equal(calls[calls.length - 1].url, "https://proxy.laoz.org/doubanapi/catalog/movie/movie_hot_gaia.json?skip=0");
+  const failFallback = await loadList({ server: "http://fail.example.com", catalog: "movie:movie_hot_gaia" });
+  assert.equal(failFallback.length, 3);
+  assert.equal(calls[calls.length - 1].url, "https://proxy.laoz.org/doubanapi/catalog/movie/movie_hot_gaia.json?skip=0");
+  const platformFallback = await loadPlatformList({ server: "http://empty.example.com", sort_by: "netflix", mediaType: "tv", sortBy: "hot" });
+  assert.ok(platformFallback.length > 0);
+  assert.ok(calls[calls.length - 1].url.startsWith("https://proxy.laoz.org/doubanapi/catalog/series/tmdb_discover_tv/"));
 
   console.log("✅ ok", { calls: calls.length });
 })().catch((e) => { console.error("❌", e); process.exit(1); });

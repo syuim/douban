@@ -55,4 +55,4 @@
 
 - 8 个模块；模块 6（TMDB）/模块 8（影视平台）的平台筛选走 `tmdb_discover_*` catalog（extra 路径段形式），其余走豆瓣榜单
 - 修改 widget 后必须：递增 `WidgetMetadata.version`，跑 `test.cjs` 与 `test-live.cjs`
-- 默认服务地址 `https://proxy.laoz.org/doubanapi`（emby-proxy 反代，仅 JSON catalog）
+- 默认服务地址 `https://proxy.laoz.org/doubanapi`（emby-proxy 反代，仅 JSON catalog）；自定义地址请求失败或无数据时自动回退默认地址

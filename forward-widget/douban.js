@@ -3,7 +3,7 @@
 WidgetMetadata = {
   id: "com.douban.discovery",
   title: "豆瓣榜单",
-  version: "1.0.10",
+  version: "1.0.11",
   requiredVersion: "0.0.1",
   description: "豆瓣热门电影、口碑榜、剧场与剧集榜单",
   author: "suyu",
@@ -298,6 +298,23 @@ function resolveServer(params = {}) {
   return server.replace(/\/+$/, "");
 }
 
+// 自定义入口请求失败或无数据时回退默认地址
+async function fetchMetas(server, path) {
+  const request = async (base) => {
+    const res = await Widget.http.get(base + path, { headers: { "User-Agent": "forward widget/1.0" } });
+    return (res.data && res.data.metas) || [];
+  };
+  if (server === DEFAULT_SERVER) return request(server);
+  try {
+    const metas = await request(server);
+    if (metas.length > 0) return metas;
+    console.warn("[fallback] 自定义入口无数据，改用默认地址:", server);
+  } catch (error) {
+    console.warn("[fallback] 自定义入口请求失败，改用默认地址:", error && error.message ? error.message : error);
+  }
+  return request(DEFAULT_SERVER);
+}
+
 async function loadList(params = {}) {
   try {
     const server = resolveServer(params);
@@ -305,7 +322,7 @@ async function loadList(params = {}) {
     const page = Math.max(1, Number(params.page || 1));
     const skip = (page - 1) * 20;
 
-    let url;
+    let path;
     const platformConfig = params.platform && params.platform !== "all" ? PLATFORM_MAP[params.platform] : null;
     if (platformConfig) {
       // 平台筛选走通用 TMDB discover catalog（trending 接口不支持平台过滤）
@@ -320,13 +337,12 @@ async function loadList(params = {}) {
         : (isMovie ? "tmdb_discover_movie" : "tmdb_discover_tv");
       const mediaType = isAnime ? "anime" : (isMovie ? "movie" : "tv");
       const query = buildDiscoverQuery(platformConfig, isMovie, { mediaType, sortBy: "hot", useProvider });
-      url = `${server}/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
+      path = `/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
     } else {
-      url = `${server}/catalog/${type}/${catalogId}.json?skip=${skip}`;
+      path = `/catalog/${type}/${catalogId}.json?skip=${skip}`;
     }
 
-    const res = await Widget.http.get(url, { headers: { "User-Agent": "forward widget/1.0" } });
-    const metas = (res.data && res.data.metas) || [];
+    const metas = await fetchMetas(server, path);
     // 过滤无 tmdb 海报的条目（豆瓣图/缺图），App 无法展示且可能整批拒收
     return metas.map(toVideoItem).filter((it) => it.posterPath);
   } catch (error) {
@@ -494,9 +510,8 @@ async function loadPlatformList(params = {}) {
       mediaType, sortBy: category, today: new Date().toISOString().split("T")[0], useProvider,
     });
     // extra 参数须编码在路径段（服务端 parseExtra 只解析 .json 前路径，query 仅 skip/genre）
-    const url = `${server}/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
-    const res = await Widget.http.get(url, { headers: { "User-Agent": "forward widget/1.0" } });
-    const metas = (res.data && res.data.metas) || [];
+    const path = `/catalog/${type}/${discoverCatalog}/${query.join("&")}.json?skip=${skip}`;
+    const metas = await fetchMetas(server, path);
     return metas.map(toVideoItem).filter((it) => it.posterPath);
   } catch (error) {
     console.error("[loadPlatformList] 失败:", error && error.message ? error.message : error);
